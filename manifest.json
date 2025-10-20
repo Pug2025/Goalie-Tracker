@@ -1,7 +1,7 @@
 {
   "name": "Team Tracker",
   "short_name": "Team Tracker",
-  "start_url": "./?v=3300",
+  "start_url": "./?v=3310",
   "display": "standalone",
   "background_color": "#0b0e11",
   "theme_color": "#0b0e11",
