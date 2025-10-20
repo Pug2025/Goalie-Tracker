@@ -1,5 +1,5 @@
-// Team Tracker — Offline Service Worker (v3.3.0)
-const CACHE = 'team-tracker-v3300';
+// Team Tracker — Offline Service Worker (v3.3.1)
+const CACHE = 'team-tracker-v3310';
 const ASSETS = [
   './',
   './index.html',
