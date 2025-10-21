@@ -6,7 +6,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<title>Team Tracker v3.3.2</title>
+<title>Team Tracker v3.3.3</title>
 <style>
   :root{
     --bg:#0b0e11; --panel:#141922; --ink:#e8ecf1; --muted:#9aa6b2; --accent:#4da3ff;
@@ -21,9 +21,10 @@
   header h1{font-size:20px;margin:0}
   .tag{font-size:12px;color:var(--muted)}
   .panel{background:var(--panel);border-radius:var(--radius);padding:12px;box-shadow:0 6px 18px rgba(0,0,0,.25)}
-  .row{display:flex;gap:10px}.col{flex:1}
+  .row{display:flex;gap:10px;flex-wrap:wrap}.col{flex:1;min-width:140px}
   label{display:block;font-size:12px;color:var(--muted);margin:0 0 6px 2px}
-  input,select{width:100%;padding:12px;border-radius:12px;border:1px solid #2a3444;background:#101827;color:var(--ink);font-size:14px;outline:none}
+  input,select,textarea{width:100%;padding:12px;border-radius:12px;border:1px solid #2a3444;background:#101827;color:var(--ink);font-size:14px;outline:none}
+  textarea{min-height:120px}
   .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px}
   .btn{-webkit-tap-highlight-color:transparent;border:none;padding:16px 14px;border-radius:14px;font-size:16px;font-weight:600;color:var(--ink);box-shadow:0 6px 12px rgba(0,0,0,.22);touch-action:manipulation;user-select:none;cursor:pointer}
   .btn:active{transform:scale(.98)}
@@ -31,6 +32,7 @@
   .smother{background:var(--btn3)} .bad{background:var(--btn4)} .big{background:var(--btn5)}
   .team{background:var(--btn7)} .roster{background:var(--btn6);padding:10px 12px;font-size:14px}
   .undo{background:var(--btn8)} .period{background:var(--btn9)}
+  .period.active{outline:2px solid var(--accent);box-shadow:0 0 0 2px rgba(77,163,255,.25) inset}
   .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
   .card{background:#101520;border:1px solid #233044;border-radius:12px;padding:10px}
   .card h3{margin:0 0 3px;font-size:12px;color:var(--muted)} .val{font-size:18px;font-weight:800}
@@ -59,7 +61,7 @@
     <h1>Team Tracker</h1>
     <div>
       <button class="btn roster" id="btnRoster">Roster</button>
-      <div class="tag" id="meta">v3.3.2</div>
+      <div class="tag" id="meta">v3.3.3</div>
     </div>
   </header>
 
@@ -73,7 +75,7 @@
       <div class="col"><label>Date</label><input id="gdate" type="date"></div>
       <div class="col">
         <label>Current Period</label>
-        <div class="row">
+        <div class="row" id="periodBtns">
           <button class="btn period" data-p="1">1</button>
           <button class="btn period" data-p="2">2</button>
           <button class="btn period" data-p="3">3</button>
@@ -155,7 +157,12 @@
 <div class="modal" id="rosterModal">
   <div class="box">
     <h3>Roster (one number per line)</h3>
-    <textarea id="rosterInput" style="height:220px" placeholder="e.g.\n4\n8\n9\n11\n17"></textarea>
+    <textarea id="rosterInput" style="height:220px" placeholder="e.g.
+4
+8
+9
+11
+17"></textarea>
     <div class="pickerRow">
       <button class="btn undo" id="closeRoster">Close</button>
       <button class="btn" id="saveRoster">Save</button>
@@ -175,7 +182,7 @@
 </div>
 
 <!-- Undo choose modal -->
-<div class="modal" id="undoModal">
+div class="modal" id="undoModal">
   <div class="box">
     <h3>Remove an event</h3>
     <div id="undoList"></div>
@@ -195,8 +202,8 @@ const todayStr=()=>new Date().toISOString().slice(0,10);
 function toast(msg){const t=$('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',1600);}
 
 /* ========== Persistence ========== */
-const KEY_STATE='tt_state_v332';
-const KEY_SEASON='tt_season_v332';
+const KEY_STATE='tt_state_v333';
+const KEY_SEASON='tt_season_v333';
 
 function saveState(){localStorage.setItem(KEY_STATE,JSON.stringify(state));}
 function loadState(){try{const s=JSON.parse(localStorage.getItem(KEY_STATE)); if(s) state=s;}catch{}}
@@ -215,8 +222,14 @@ let state={
   roster:[]
 };
 
-/* ========== Formatting ========== */
-function fmtPctRaw(n,d,dec=3){ if(d<=0) return '.000'; return (n/d).toFixed(dec).slice(1); }
+/* ========== Formatting helpers ========== */
+// NHL-style dot formatting: .800, .923 — but 1.000 when perfect.
+function fmtDotPct(rate){
+  if(!rate || rate<=0) return '.000';
+  if(rate>=0.9995) return '1.000';
+  const s = rate.toFixed(3);            // e.g., "0.857"
+  return s.startsWith('0') ? s.slice(1) : s; // ".857"
+}
 
 /* ========== Roster ========== */
 function openRoster(){
@@ -238,7 +251,7 @@ $('closeRoster').onclick=()=>$('rosterModal').style.display='none';
 $('saveRoster').onclick=saveRosterFromModal;
 
 /* ========== Pickers (Shot/Goal/Assist) ========== */
-let pickerResolve=null, pickerReject=null, pickerTitle='Select Player';
+let pickerResolve=null, pickerReject=null;
 function pickNumber(title){
   if(!state.roster.length){toast('Add roster first');return Promise.reject();}
   $('pickerTitle').textContent=title||'Select Player';
@@ -261,8 +274,7 @@ $('pickerCancel').onclick=()=>{$('pickerModal').style.display='none'; if(pickerR
 function addEvent(ev){
   ev.ts=nowTime(); ev.period=state.period;
   state.events.push(ev);
-
-  // Counters
+  // Fast counters (also recomputed in any undo)
   switch(ev.type){
     case 'save': state.countsA.shots++; break;
     case 'big':  state.countsA.shots++; state.countsA.bigSaves++; break;
@@ -288,7 +300,7 @@ function openUndoPicker(){
   const last=state.events.slice(-5).map((e,i)=>({e,idx:state.events.length-5+i})).filter(x=>x.idx>=0);
   if(!last.length){toast('Nothing to undo');return;}
   const box=$('undoList');
-  box.innerHTML=last.map((x,ix)=>`
+  box.innerHTML=last.map((x)=>`
     <div class="pickerBtn" data-i="${x.idx}">
       P${x.e.period} • ${x.e.ts} — ${labelFor(x.e)}
     </div>`).join('');
@@ -348,42 +360,42 @@ function renderLog(){
   )).join('');
 }
 
-/* ========== Scoring ========== */
-/* Raw for display; stabilized for points */
-function rawSV(){ const SA=state.countsA.shots, GA=state.countsA.goals; if(SA<=0) return 0; return (SA-GA)/SA; }
-function rawShPct(){ const S=state.countsF.shots, G=state.countsF.goals; if(S<=0) return 0; return G/S; }
+/* ========== Pure calculators so season export doesn't mutate state ========== */
+function calcRawSV(st){ const SA=st.countsA.shots, GA=st.countsA.goals; return SA>0 ? (SA-GA)/SA : 0; }
+function calcShPct(st){ const S=st.countsF.shots, G=st.countsF.goals; return S>0 ? G/S : 0; }
 
-/* goalie */
-function goalieScore(){
-  const SA=state.countsA.shots, GA=state.countsA.goals, SM=state.countsA.smothers, BR=state.countsA.badRebounds, BIG=state.countsA.bigSaves;
-  // Stabilized save% for scoring
-  const priorSA=5, priorSV=0.85;
-  const adjSV = ( (SA * Math.max(0,SA-GA)) + (priorSA * priorSV*SA) ) / ( (SA||1) * (SA + priorSA) ); // simple shrink
-  const svPts = (SA===0?50:adjSV*100)*0.6; // 0..60 (50 if SA=0)
-  // rebound control: good = smothers + (saves - GA - bad)
+function calcGoalieScore(st){
+  const SA=st.countsA.shots, GA=st.countsA.goals, SM=st.countsA.smothers, BR=st.countsA.badRebounds, BIG=st.countsA.bigSaves;
   const saves = Math.max(0, SA-GA);
+  // Stabilized SV
+  const priorSA=5, priorSV=0.85;
+  const adjSV = ( (SA * saves) + (priorSA * priorSV*SA) ) / ( (SA||1) * (SA + priorSA) );
+  const svPts = (SA===0?50:adjSV*100)*0.6; // 0..60 (50 if SA=0)
   const goodReb = Math.max(0, saves - BR) + SM;
   const rebShare = (goodReb + BR) ? goodReb / (goodReb + BR) : 0.5;
   const rebPts = Math.min(20, Math.max(0, rebShare*20)); // 0..20
-  const softPenalty = Math.min(10, (eventsOf('soft_goal').length)*5);
-  const bigBonus = Math.min(10, BIG*1); // light bonus
+  const softPenalty = Math.min(10, (st.events.filter(e=>e.type==='soft_goal').length)*5);
+  const bigBonus = Math.min(10, BIG*1);
   const total = Math.round(Math.max(0, Math.min(100, svPts + rebPts + (10-softPenalty) + bigBonus)));
   return {total, parts:{svPts:svPts.toFixed(1), rebPts:rebPts.toFixed(1), soft:softPenalty, big:BIG}};
 }
-
-/* team */
-function teamScore(){
-  const SF=state.countsF.shots, GF=state.countsF.goals;
-  const SA=state.countsA.shots, GA=state.countsA.goals;
-  const BA=state.team.breakawaysAgainst||0, DZ=state.team.dzTurnovers||0;
+function calcTeamScore(st){
+  const SF=st.countsF.shots, GF=st.countsF.goals;
+  const SA=st.countsA.shots, GA=st.countsA.goals;
+  const BA=st.team.breakawaysAgainst||0, DZ=st.team.dzTurnovers||0;
   const shotShare = (SF+SA)? SF/(SF+SA) : 0.5;
-  const shEff = rawShPct(); // finishing
-  const defFin = 1 - (GA/(SA||1)); // prevent blow-ups
-  const stability = Math.max(0, 1 - (BA*0.07 + DZ*0.05)); // light penalties
+  const shEff = (SF>0? GF/SF : 0);
+  const defFin = 1 - (GA/(SA||1));
+  const stability = Math.max(0, 1 - (BA*0.07 + DZ*0.05));
   const total = Math.round(Math.max(0, Math.min(100, (shotShare*30) + (shEff*25) + (defFin*35) + (stability*10))));
   return {total, parts:{shotShare:shotShare.toFixed(3), shEff:shEff.toFixed(3), defFin:defFin.toFixed(3), stability:stability.toFixed(3)}};
 }
-function eventsOf(t){ return state.events.filter(e=>e.type===t); }
+
+/* Convenience wrappers on current state */
+function rawSV(){ return calcRawSV(state); }
+function rawShPct(){ return calcShPct(state); }
+function goalieScore(){ return calcGoalieScore(state); }
+function teamScore(){ return calcTeamScore(state); }
 
 /* ========== Refresh UI ========== */
 function refresh(){
@@ -392,19 +404,21 @@ function refresh(){
   $('saVal').textContent=A.shots;
   $('svsVal').textContent=saves;
   $('gaVal').textContent=A.goals;
-  $('svpVal').textContent = (A.shots>0? rawSV().toFixed(3).slice(1) : '.000'); // .xxx
+  $('svpVal').textContent = fmtDotPct(rawSV());           // .xxx or 1.000
   $('smVal').textContent=A.smothers;
   $('brVal').textContent=A.badRebounds;
   $('bigVal').textContent=A.bigSaves;
   $('sfVal').textContent=F.shots;
   $('gfVal').textContent=F.goals;
-  $('oshVal').textContent=(F.shots>0? rawShPct().toFixed(3).slice(1) : '.000');
+  $('oshVal').textContent=fmtDotPct(rawShPct());          // .xxx or 1.000
+  $('teamScoreVal').textContent=teamScore().total;
 
   renderPeriodBox();
   renderLog();
+  updatePeriodButtons();
 }
 
-/* Period box */
+/* Period aggregates */
 function perAgg(){
   const agg={1:{F:{S:0,G:0},A:{S:0,G:0}},2:{F:{S:0,G:0},A:{S:0,G:0}},3:{F:{S:0,G:0},A:{S:0,G:0}},4:{F:{S:0,G:0},A:{S:0,G:0}}};
   for(const e of state.events){
@@ -419,19 +433,18 @@ function perAgg(){
 function renderPeriodBox(){
   const agg=perAgg();
   const cells=[1,2,3,4].map(p=>{
-    const a=agg[p]; const svp=a.A.S? ((a.A.S-a.A.G)/a.A.S).toFixed(3).slice(1) : '—';
-    const shp=a.F.S? (a.F.G/a.F.S).toFixed(3).slice(1) : '—';
+    const a=agg[p]; const svp=a.A.S? fmtDotPct((a.A.S-a.A.G)/a.A.S) : '—';
+    const shp=a.F.S? fmtDotPct(a.F.G/a.F.S) : '—';
     const tag=(p===4?'OT':`P${p}`);
     return `<div class="card"><h3>${tag}</h3><div>${a.F.S}-${a.A.S} • ${a.F.G}-${a.A.G} • SV ${svp} • Sh% ${shp}</div></div>`;
   }).join('');
-  $('periodBox').innerHTML=cells || '';
+  $('periodBox').innerHTML=cells;
 }
 
 /* ========== Buttons ========== */
 $('btnShot').onclick = ()=> addEvent({type:'save'});
 $('btnBigSave').onclick = ()=> addEvent({type:'big'});
 function chooseGACause(cb){
-  // quick chooser: BA, DZ, other via prompt
   const v = prompt('Goal context? Enter BA, DZ, or leave blank', '');
   const cause = (v||'').trim().toUpperCase();
   cb(cause==='BA'?'BA':cause==='DZ'?'DZ':'other');
@@ -461,17 +474,27 @@ $('btnNextPeriod').onclick = ()=>{
   state.period = Math.min(4, state.period+1);
   toast(`Period ${state.period===4?'OT':state.period}`);
   saveState();
+  updatePeriodButtons();
 };
 
-/* Undo: tap = last; long press = choose list */
-let undoPressTimer=null;
-$('btnUndo').addEventListener('touchstart',()=>{undoPressTimer=setTimeout(openUndoPicker,500);});
-$('btnUndo').addEventListener('touchend',()=>{if(undoPressTimer){clearTimeout(undoPressTimer);undoLast();}});
-$('btnUndo').addEventListener('mousedown',()=>{undoPressTimer=setTimeout(openUndoPicker,500);});
-$('btnUndo').addEventListener('mouseup',()=>{if(undoPressTimer){clearTimeout(undoPressTimer);undoLast();}});
+/* Undo: fixed long-press so it doesn't also trigger single undo */
+let undoTimer=null, undoLong=false;
+function undoStart(){
+  undoLong=false;
+  undoTimer=setTimeout(()=>{undoLong=true; openUndoPicker();},500);
+}
+function undoEnd(){
+  if(undoTimer){clearTimeout(undoTimer); undoTimer=null;}
+  if(!undoLong) undoLast();
+}
+const btnUndo=$('btnUndo');
+btnUndo.addEventListener('pointerdown',undoStart);
+btnUndo.addEventListener('pointerup',undoEnd);
+btnUndo.addEventListener('pointerleave',undoEnd);
 
 /* End game -> summary + season append */
 $('btnEnd').onclick = ()=>{
+  syncMetaFromInputs();
   buildSummary();
   appendSeasonLog();
   $('summaryPanel').classList.remove('hidden');
@@ -502,12 +525,11 @@ function perPlayer(){
 }
 function buildBreakdowns(){
   const GK=goalieScore(), TM=teamScore();
-  const A=state.countsA, F=state.countsF;
-  const svRaw=(A.shots?((A.shots-A.goals)/A.shots).toFixed(3).slice(1):'.000');
-  const txtGK=`Save % contributed <b>${parseFloat(GK.parts.svPts).toFixed(1)}</b> points. Rebound control contributed <b>${parseFloat(GK.parts.rebPts).toFixed(1)}</b> (bad ${A.badRebounds}, smother ${A.smothers}). Soft goals impact <b>${(eventsOf('soft_goal').length*5).toFixed(1)}</b>. Big saves impact <b>${state.countsA.bigSaves}</b>.`;
+  const A=state.countsA;
+  const svRaw=fmtDotPct(rawSV());
   const txtTM=`Shot share <b>${(TM.parts.shotShare*100).toFixed(0)}%</b>, finishing <b>${(TM.parts.shEff*100).toFixed(0)}%</b>, defensive finishing <b>${(TM.parts.defFin*100).toFixed(0)}%</b>, stability <b>${(TM.parts.stability*100).toFixed(0)}%</b>.`;
   return `
-    <div class="card"><h3>Goalie Breakdown</h3><div>SV ${svRaw} → ${GK.parts.svPts} pts. Rebounds ${GK.parts.rebPts} pts. Soft goals: −${(eventsOf('soft_goal').length*5).toFixed(1)}. Big saves bonus: ${state.countsA.bigSaves}.</div></div>
+    <div class="card"><h3>Goalie Breakdown</h3><div>SV ${svRaw} → ${GK.parts.svPts} pts. Rebounds ${GK.parts.rebPts} pts. Soft goals: −${(state.events.filter(e=>e.type==='soft_goal').length*5).toFixed(1)}. Big saves bonus: ${state.countsA.bigSaves}.</div></div>
     <div class="card" style="margin-top:8px;"><h3>Team Breakdown</h3><div>${txtTM}</div></div>
   `;
 }
@@ -515,8 +537,9 @@ function buildSummary(){
   const date=state.meta.date||todayStr(), opp=state.meta.opponent||'Unknown', lvl=state.meta.level||'U11';
   const GK=goalieScore(), TM=teamScore();
   const A=state.countsA, F=state.countsF;
-  const rawSv = (A.shots?((A.shots-A.goals)/A.shots).toFixed(3).slice(1):'.000');
-  const shPct = (F.shots?(F.goals/F.shots).toFixed(3).slice(1):'.000');
+  const rawSv = fmtDotPct(rawSV());
+  const shPct = fmtDotPct(rawShPct());
+
   $('summaryHdr').textContent=`Game Summary — ${opp} • ${lvl} • ${date}`;
   $('goalieScoreNum').textContent=GK.total;
   $('teamScoreNum').textContent=TM.total;
@@ -548,24 +571,25 @@ function buildSummary(){
     <div>Goals Against off Breakaway: <b>${gaBA}</b> • off D-zone Turnover: <b>${gaDZ}</b> • Other: <b>${gaOther}</b></div>
   `;
 
-  // Tables
+  // Period table
   const agg=perAgg();
   const rows=[1,2,3,4].map(p=>{
     const a=agg[p];
-    const svp=a.A.S?((a.A.S-a.A.G)/a.A.S).toFixed(3).slice(1):'—';
-    const shp=a.F.S?(a.F.G/a.F.S).toFixed(3).slice(1):'—';
+    const svp=a.A.S?fmtDotPct((a.A.S-a.A.G)/a.A.S):'—';
+    const shp=a.F.S?fmtDotPct(a.F.G/a.F.S):'—';
     return `<tr><td>${p===4?'OT':p}</td><td>${a.F.S}</td><td>${a.A.S}</td><td>${a.F.G}</td><td>${a.A.G}</td><td>${svp}</td><td>${shp}</td></tr>`;
   }).join('');
-  const totSVP = A.shots?((A.shots-A.goals)/A.shots).toFixed(3).slice(1):'.000';
-  const totShP = F.shots?(F.goals/F.shots).toFixed(3).slice(1):'.000';
+  const totSVP = fmtDotPct(rawSV());
+  const totShP = fmtDotPct(rawShPct());
   const perTbl=`<div class="card"><h3>Periods</h3>
     <table><thead><tr><th>Period</th><th>Shots For</th><th>Shots Against</th><th>Goals For</th><th>Goals Against</th><th>Save %</th><th>Our Sh%</th></tr></thead>
     <tbody>${rows}<tr><th>Total</th><th>${F.shots}</th><th>${A.shots}</th><th>${F.goals}</th><th>${A.goals}</th><th>${totSVP}</th><th>${totShP}</th></tr></tbody></table></div>`;
 
+  // Player table
   const PP=perPlayer();
   const prow = PP.players.map(n=>{
     const s=PP.shots.get(n)||0, g=PP.goals.get(n)||0, a=PP.ast.get(n)||0;
-    const sp=s? (g/s).toFixed(3).slice(1):'.000';
+    const sp=fmtDotPct(s? g/s : 0);
     return `<tr><td>#${n}</td><td>${s}</td><td>${g}</td><td>${a}</td><td>${sp}</td></tr>`;
   }).join('') || '<tr><td colspan="5">—</td></tr>';
   const playersTbl=`<div class="card" style="margin-top:8px;"><h3>Players</h3>
@@ -577,6 +601,7 @@ function buildSummary(){
 
 /* CSV export (filename includes date + opponent) */
 function exportCSV(){
+  syncMetaFromInputs();
   const date=state.meta.date||todayStr(), opp=(state.meta.opponent||'Unknown').replace(/[^a-z0-9-_]+/gi,'_');
   const PP=perPlayer(); const A=state.countsA, F=state.countsF;
   const header=['Period','Time','Type','Detail'];
@@ -595,7 +620,7 @@ function exportCSV(){
   lines.push('Player,Shots,Goals,Assists,Sh%');
   for(const n of PP.players){
     const s=PP.shots.get(n)||0, g=PP.goals.get(n)||0, a=PP.ast.get(n)||0;
-    const sp=s? (g/s).toFixed(3).slice(1):'.000';
+    const sp=fmtDotPct(s? g/s : 0);
     lines.push(`#${n},${s},${g},${a},${sp}`);
   }
   const blob=new Blob([lines.join('\n')],{type:'text/csv'});
@@ -623,12 +648,9 @@ function exportSeason(){
   if(!seasonLog.length){toast('Season log is empty');return;}
   const lines=['Date,Opponent,Level,TeamScore,GoalieScore,ShotsFor,GoalsFor,ShotsAgainst,GoalsAgainst'];
   for(const g of seasonLog){
-    const GK=(()=>{ // recompute
-      const st=JSON.parse(JSON.stringify(g));
-      state=st; const r=goalieScore(); state=st; return r.total;
-    })();
-    const TM=(()=>{ const st=JSON.parse(JSON.stringify(g)); state=st; const r=teamScore(); state=st; return r.total;})();
-    lines.push([g.meta.date,g.meta.opponent,g.meta.level,TM,GK,g.countsF.shots,g.countsF.goals,g.countsA.shots,g.countsA.goals].join(','));
+    const gk = calcGoalieScore(g).total;
+    const tm = calcTeamScore(g).total;
+    lines.push([g.meta.date,g.meta.opponent,g.meta.level,tm,gk,g.countsF.shots,g.countsF.goals,g.countsA.shots,g.countsA.goals].join(','));
   }
   const blob=new Blob([lines.join('\n')],{type:'text/csv'});
   const url=URL.createObjectURL(blob);
@@ -640,18 +662,30 @@ function resetSeason(){
 }
 
 /* ========== Setup & Init ========== */
+function updatePeriodButtons(){
+  document.querySelectorAll('#periodBtns .period').forEach(b=>{
+    const p=parseInt(b.dataset.p,10);
+    b.classList.toggle('active', p===state.period);
+  });
+}
+function syncMetaFromInputs(){
+  state.meta.opponent=$('opponent').value.trim();
+  state.meta.level=$('level').value.trim();
+  state.meta.date=$('gdate').value||todayStr();
+  saveState();
+}
 function wire(){
-  $('gdate').value = todayStr();
-  document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{state.period=parseInt(b.dataset.p,10); toast(`Period ${state.period===4?'OT':state.period}`); saveState();});
+  // meta inputs persist on change
+  ['opponent','level','gdate'].forEach(id=>{
+    $(id).addEventListener('input', syncMetaFromInputs);
+    $(id).addEventListener('change', syncMetaFromInputs);
+  });
+  $('gdate').value = state.meta.date || todayStr();
+  document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{state.period=parseInt(b.dataset.p,10); toast(`Period ${state.period===4?'OT':state.period}`); saveState(); updatePeriodButtons();});
   $('btnExportCSV').onclick=exportCSV;
   $('btnCopySummary').onclick=copySummary;
   $('btnExportSeason').onclick=exportSeason;
   $('btnResetSeason').onclick=resetSeason;
-}
-function loadMetaFromInputs(){
-  state.meta.opponent=$('opponent').value||state.meta.opponent||'';
-  state.meta.level=$('level').value||state.meta.level||'';
-  state.meta.date=$('gdate').value||state.meta.date||todayStr();
 }
 function init(){
   loadSeason();
@@ -661,6 +695,7 @@ function init(){
   $('opponent').value=state.meta.opponent||'';
   $('level').value=state.meta.level||'';
   $('gdate').value=state.meta.date||todayStr();
+  updatePeriodButtons();
   refresh();
 }
 init();
