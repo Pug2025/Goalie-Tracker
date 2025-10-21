@@ -6,223 +6,669 @@
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<title>Team Tracker – iPhone (v3.3.2)</title>
+<title>Team Tracker v3.3.2</title>
 <style>
   :root{
     --bg:#0b0e11; --panel:#141922; --ink:#e8ecf1; --muted:#9aa6b2; --accent:#4da3ff;
-    --good:#35c759; --warn:#ff9f0a; --bad:#ff453a; --btn:#1f2a38; --btn2:#243041; --radius:14px;
+    --good:#35c759; --warn:#ff9f0a; --bad:#ff453a; --btn1:#1e2f47; --btn2:#3a2230; --btn3:#1d3b2a;
+    --btn4:#3b2a1d; --btn5:#1d2f3b; --btn6:#20324a; --btn7:#2a2342; --btn8:#2b3240; --btn9:#2a2f3a;
+    --radius:14px;
   }
   html,body{height:100%}
   body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink)}
   .wrap{max-width:520px;margin:0 auto;padding:14px}
-  header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:6px 0 10px}
-  header h1{font-size:20px;margin:0;letter-spacing:.2px}
+  header{display:flex;align-items:center;justify-content:space-between;margin:6px 0 10px}
+  header h1{font-size:20px;margin:0}
   .tag{font-size:12px;color:var(--muted)}
   .panel{background:var(--panel);border-radius:var(--radius);padding:12px;box-shadow:0 6px 18px rgba(0,0,0,.25)}
   .row{display:flex;gap:10px}.col{flex:1}
   label{display:block;font-size:12px;color:var(--muted);margin:0 0 6px 2px}
-  input,select{width:100%;padding:12px;border-radius:12px;border:1px solid #2a3444;background:var(--btn);color:var(--ink);font-size:14px;outline:none}
-
+  input,select{width:100%;padding:12px;border-radius:12px;border:1px solid #2a3444;background:#101827;color:var(--ink);font-size:14px;outline:none}
   .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px}
-  .btn{-webkit-tap-highlight-color:transparent;background:var(--btn2);color:var(--ink);border:none;padding:16px 14px;border-radius:14px;font-size:16px;font-weight:600;box-shadow:0 6px 12px rgba(0,0,0,.22);touch-action:manipulation;user-select:none;cursor:pointer}
+  .btn{-webkit-tap-highlight-color:transparent;border:none;padding:16px 14px;border-radius:14px;font-size:16px;font-weight:600;color:var(--ink);box-shadow:0 6px 12px rgba(0,0,0,.22);touch-action:manipulation;user-select:none;cursor:pointer}
   .btn:active{transform:scale(.98)}
-  .btn.shot{background:#1e2f47}.btn.goal{background:#3a2230}.btn.soft{background:#4b2430}.btn.smother{background:#1d3b2a}
-  .btn.bad{background:#3b2a1d}.btn.big{background:#1d2f3b}.btn.undo{background:#2b3240}.btn.period{background:#2a2f3a}
-  .btn.end{background:linear-gradient(180deg,#345e2f,#1f381c)}
-  .btn.roster{background:#20324a;padding:10px 12px;font-size:14px}
-  .btn.team{background:#2a2342}
+  .shot{background:var(--btn1)} .goal{background:var(--btn2)} .soft{background:#4b2430}
+  .smother{background:var(--btn3)} .bad{background:var(--btn4)} .big{background:var(--btn5)}
+  .team{background:var(--btn7)} .roster{background:var(--btn6);padding:10px 12px;font-size:14px}
+  .undo{background:var(--btn8)} .period{background:var(--btn9)}
   .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
   .card{background:#101520;border:1px solid #233044;border-radius:12px;padding:10px}
-  .card h3{margin:0 0 2px;font-size:12px;color:var(--muted)} .card .val{font-size:18px;font-weight:700}
-  .periods{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:4px}
-  .chip{text-align:center;padding:10px 8px;border-radius:10px;border:1px solid #2a3444;background:#152030;font-weight:700;cursor:pointer;user-select:none}
-  .chip.active{background:#1b3352;border-color:#2f5e9a;color:#cfe5ff}
-
-  .log{margin-top:10px;max-height:180px;overflow:auto;border:1px solid #233044;border-radius:12px;padding:8px;background:#0f141d}
-  .log .item{font-size:13px;padding:6px 4px;border-bottom:1px dashed #202b3b}.log .item:last-child{border-bottom:none}
-  .foot-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
-  .small{font-size:12px;color:var(--muted)}
-  .score{font-size:44px;font-weight:800;letter-spacing:1px}
-  .good{color:var(--good)}.warn{color:var(--warn)}.bad{color:var(--bad)}
-  .hidden{display:none}
+  .card h3{margin:0 0 3px;font-size:12px;color:var(--muted)} .val{font-size:18px;font-weight:800}
   .banner{margin-top:8px;padding:8px 10px;border-radius:10px;background:#0e1a2a;border:1px solid #224064;color:#cfe5ff;font-size:12px}
+  .score{font-size:46px;font-weight:900;letter-spacing:.5px}.good{color:var(--good)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+  .log{margin-top:10px;max-height:200px;overflow:auto;border:1px solid #233044;border-radius:12px;padding:8px;background:#0f141d}
+  .log .item{font-size:13px;padding:6px 4px;border-bottom:1px dashed #202b3b}
+  .log .item:last-child{border-bottom:none}
+  .foot{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px}
 
+  /* modal & pickers */
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:16px;z-index:9999}
   .modal .box{background:#0e1320;border:1px solid #2a3a55;border-radius:12px;max-width:520px;width:100%;padding:12px}
-  .modal textarea{width:100%;height:220px;background:#0b1220;color:#e8ecf1;border:1px solid #243248;border-radius:10px;padding:8px;font-size:14px}
-  .modal .rowbtn{display:flex;gap:10px;margin-top:8px}
-  .mini{font-size:11px;color:#a6b3c2}
-  .pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
-  .pchip{background:#0f1a28;border:1px solid #223045;border-radius:10px;padding:8px}
-  .pchip h4{margin:0 0 4px;font-size:11px;color:#9ab7d6}
-  .pchip div{font-size:13px;font-weight:700}
   .pickerGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}
   .pickerBtn{background:#152033;border:1px solid #2a3c5a;border-radius:10px;padding:12px 8px;text-align:center;font-weight:800;cursor:pointer}
-  .inlineRow{display:flex;gap:8px;align-items:center}
+  .pickerRow{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+  .hidden{display:none}
   table{width:100%;border-collapse:collapse}
-  th,td{border:1px solid #233044;padding:6px 8px;font-size:12px}
-  th{background:#0f1a28;color:#cfe5ff;text-align:left}
-  .undoList{max-height:300px;overflow:auto;margin-top:6px}
-  .undoRow{background:#10182a;border:1px solid #22324a;border-radius:10px;padding:10px;margin-bottom:8px;cursor:pointer}
-  .undoRow:active{transform:scale(.99)}
+  th,td{border:1px solid #233044;padding:6px 8px;font-size:12px} th{background:#0f1a28;color:#cfe5ff;text-align:left}
   .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;background:#0f1e32;border:1px solid #274468;color:#d9ecff;padding:10px 12px;border-radius:12px;font-size:13px;display:none;z-index:10000}
-  .toast button{margin-left:8px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <h1>Team Tracker</h1>
-    <div class="inlineRow">
-      <button class="btn roster" id="btnRoster" type="button" aria-haspopup="dialog" aria-controls="rosterModal">Roster</button>
-      <div class="tag" id="gameMetaTag">New game</div>
+    <div>
+      <button class="btn roster" id="btnRoster">Roster</button>
+      <div class="tag" id="meta">v3.3.2</div>
     </div>
   </header>
 
-  <!-- Setup panel omitted here for brevity — unchanged from v3.3.1 -->
+  <!-- Setup -->
+  <div class="panel" id="setup">
+    <div class="row">
+      <div class="col"><label>Opponent</label><input id="opponent" placeholder="Opponent"></div>
+      <div class="col"><label>Level</label><input id="level" placeholder="e.g., U11"></div>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <div class="col"><label>Date</label><input id="gdate" type="date"></div>
+      <div class="col">
+        <label>Current Period</label>
+        <div class="row">
+          <button class="btn period" data-p="1">1</button>
+          <button class="btn period" data-p="2">2</button>
+          <button class="btn period" data-p="3">3</button>
+          <button class="btn period" data-p="4">OT</button>
+        </div>
+      </div>
+    </div>
+    <div class="banner">Tip: Add to Home Screen in Safari for one-tap access.</div>
+  </div>
 
-  <!-- ACTION BUTTONS / STATS / LOG / FOOTER PANELS — unchanged layout -->
+  <!-- Controls -->
+  <div class="panel">
+    <div class="grid">
+      <button class="btn shot" id="btnShot">Shot (Saved)</button>
+      <button class="btn big" id="btnBigSave">Big Save</button>
+      <button class="btn goal" id="btnGoal">Goal</button>
+      <button class="btn soft" id="btnSoftGoal">Soft Goal</button>
+      <button class="btn smother" id="btnSmother">Smother</button>
+      <button class="btn bad" id="btnBadRebound">Bad Rebound</button>
+      <button class="btn team" id="btnOurShot">Our Shot</button>
+      <button class="btn team" id="btnOurGoal">Our Goal</button>
+      <button class="btn team" id="btnBreakaway">Breakaway Against</button>
+      <button class="btn team" id="btnDZTurnover">D-Zone Turnover</button>
+      <button class="btn undo" id="btnUndo" title="Tap: undo last • Hold: pick from last 5">Undo</button>
+      <button class="btn period" id="btnNextPeriod">Next Period</button>
+    </div>
 
-  <!-- ... everything above this comment remains exactly the same as v3.3.1 ... -->
+    <!-- Stats grid -->
+    <div class="stats">
+      <div class="card"><h3>Shots Against</h3><div class="val" id="saVal">0</div></div>
+      <div class="card"><h3>Saves</h3><div class="val" id="svsVal">0</div></div>
+      <div class="card"><h3>Goals Against</h3><div class="val" id="gaVal">0</div></div>
+      <div class="card"><h3>Save %</h3><div class="val" id="svpVal">.000</div></div>
+      <div class="card"><h3>Smothers</h3><div class="val" id="smVal">0</div></div>
+      <div class="card"><h3>Bad Rebounds</h3><div class="val" id="brVal">0</div></div>
+      <div class="card"><h3>Big Saves</h3><div class="val" id="bigVal">0</div></div>
+      <div class="card"><h3>Shots For</h3><div class="val" id="sfVal">0</div></div>
+      <div class="card"><h3>Goals For</h3><div class="val" id="gfVal">0</div></div>
+      <div class="card"><h3>Our Sh%</h3><div class="val" id="oshVal">.000</div></div>
+      <div class="card"><h3>Team Score</h3><div class="val" id="teamScoreVal">0</div></div>
+    </div>
+
+    <!-- Period summary -->
+    <div id="periodBox" class="banner"></div>
+
+    <!-- Log -->
+    <div class="log" id="eventLog"></div>
+
+    <div class="foot">
+      <button class="btn" id="btnEnd">End Game & Score</button>
+      <button class="btn undo" id="btnNew">New Game</button>
+      <button class="btn" id="btnExportCSV">Export Game CSV</button>
+      <button class="btn" id="btnExportSeason">Export Season Log</button>
+      <button class="btn undo" id="btnResetSeason">Reset Season Log</button>
+      <button class="btn" id="btnCopySummary">Copy Summary</button>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div id="summaryPanel" class="panel hidden">
+    <div class="row" style="align-items:center;">
+      <div class="col"><div class="tag" id="summaryHdr">Game Summary</div></div>
+      <div class="col" style="text-align:right;">
+        <span class="score good" id="goalieScoreNum">—</span>
+        <span class="score bad" id="teamScoreNum" style="margin-left:12px;">—</span>
+      </div>
+    </div>
+
+    <div id="breakdowns" class="card" style="margin-top:8px;"></div>
+    <div id="gameInfo" class="card" style="margin-top:8px;"></div>
+    <div id="scoresCard" class="card" style="margin-top:8px;"></div>
+    <div id="teamStatsCard" class="card" style="margin-top:8px;"></div>
+    <div id="tablesCard" style="margin-top:8px;"></div>
+  </div>
+
+</div>
+
+<!-- Roster modal -->
+<div class="modal" id="rosterModal">
+  <div class="box">
+    <h3>Roster (one number per line)</h3>
+    <textarea id="rosterInput" style="height:220px" placeholder="e.g.\n4\n8\n9\n11\n17"></textarea>
+    <div class="pickerRow">
+      <button class="btn undo" id="closeRoster">Close</button>
+      <button class="btn" id="saveRoster">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Number picker modal (shots/goals/assist) -->
+<div class="modal" id="pickerModal">
+  <div class="box">
+    <h3 id="pickerTitle">Select Player</h3>
+    <div class="pickerGrid" id="pickerGrid"></div>
+    <div class="pickerRow">
+      <button class="btn undo" id="pickerCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Undo choose modal -->
+<div class="modal" id="undoModal">
+  <div class="box">
+    <h3>Remove an event</h3>
+    <div id="undoList"></div>
+    <div class="pickerRow">
+      <button class="btn undo" id="undoCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
 
 <script>
-/* service worker registration unchanged */
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', ()=>navigator.serviceWorker.register('service-worker.js'));
+/* ========== Mini helpers ========== */
+const $=id=>document.getElementById(id);
+const nowTime=()=>new Date().toLocaleTimeString('en-CA',{hour12:false});
+const todayStr=()=>new Date().toISOString().slice(0,10);
+function toast(msg){const t=$('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',1600);}
+
+/* ========== Persistence ========== */
+const KEY_STATE='tt_state_v332';
+const KEY_SEASON='tt_season_v332';
+
+function saveState(){localStorage.setItem(KEY_STATE,JSON.stringify(state));}
+function loadState(){try{const s=JSON.parse(localStorage.getItem(KEY_STATE)); if(s) state=s;}catch{}}
+function saveSeason(){localStorage.setItem(KEY_SEASON,JSON.stringify(seasonLog));}
+function loadSeason(){try{const s=JSON.parse(localStorage.getItem(KEY_SEASON)); if(s) seasonLog=s;}catch{}}
+
+/* ========== State ========== */
+let seasonLog=[];
+let state={
+  meta:{opponent:'',level:'',date:todayStr()},
+  period:1,
+  countsA:{shots:0,goals:0,smothers:0,badRebounds:0,bigSaves:0},
+  countsF:{shots:0,goals:0},
+  team:{breakawaysAgainst:0,dzTurnovers:0},
+  events:[],
+  roster:[]
+};
+
+/* ========== Formatting ========== */
+function fmtPctRaw(n,d,dec=3){ if(d<=0) return '.000'; return (n/d).toFixed(dec).slice(1); }
+
+/* ========== Roster ========== */
+function openRoster(){
+  $('rosterInput').value=state.roster.join('\n');
+  $('rosterModal').style.display='flex';
+}
+function saveRosterFromModal(){
+  const nums=$('rosterInput').value.split('\n')
+    .map(s=>s.replace(/\D/g,'')).filter(Boolean)
+    .map(n=>parseInt(n,10)).filter(n=>!isNaN(n));
+  const unique=[...new Set(nums)].sort((a,b)=>a-b);
+  state.roster=unique;
+  saveState();
+  $('rosterModal').style.display='none';
+  toast('Roster saved');
+}
+$('btnRoster').onclick=openRoster;
+$('closeRoster').onclick=()=>$('rosterModal').style.display='none';
+$('saveRoster').onclick=saveRosterFromModal;
+
+/* ========== Pickers (Shot/Goal/Assist) ========== */
+let pickerResolve=null, pickerReject=null, pickerTitle='Select Player';
+function pickNumber(title){
+  if(!state.roster.length){toast('Add roster first');return Promise.reject();}
+  $('pickerTitle').textContent=title||'Select Player';
+  const grid=$('pickerGrid');
+  grid.innerHTML=state.roster.map(n=>`<div class="pickerBtn" data-n="${n}">#${n}</div>`).join('');
+  $('pickerModal').style.display='flex';
+  return new Promise((res,rej)=>{
+    pickerResolve=res; pickerReject=rej;
+  });
+}
+$('pickerGrid').addEventListener('click',e=>{
+  const el=e.target.closest('.pickerBtn'); if(!el) return;
+  const n=parseInt(el.dataset.n,10);
+  $('pickerModal').style.display='none';
+  if(pickerResolve) pickerResolve(n);
+});
+$('pickerCancel').onclick=()=>{$('pickerModal').style.display='none'; if(pickerReject) pickerReject();};
+
+/* ========== Events & Counters ========== */
+function addEvent(ev){
+  ev.ts=nowTime(); ev.period=state.period;
+  state.events.push(ev);
+
+  // Counters
+  switch(ev.type){
+    case 'save': state.countsA.shots++; break;
+    case 'big':  state.countsA.shots++; state.countsA.bigSaves++; break;
+    case 'goal': state.countsA.goals++; break;
+    case 'soft_goal': state.countsA.goals++; ev.soft=true; break;
+    case 'smother': state.countsA.smothers++; break;
+    case 'bad_rebound': state.countsA.badRebounds++; break;
+    case 'our_shot': state.countsF.shots++; break;
+    case 'our_goal': state.countsF.goals++; break;
+    case 'ba': state.team.breakawaysAgainst++; break;
+    case 'dz': state.team.dzTurnovers++; break;
+  }
+  refresh();
+  saveState();
+}
+function undoLast(){
+  const ev=state.events.pop();
+  if(!ev){toast('Nothing to undo');return;}
+  recomputeFromEvents();
+  toast('Undid last');
+}
+function openUndoPicker(){
+  const last=state.events.slice(-5).map((e,i)=>({e,idx:state.events.length-5+i})).filter(x=>x.idx>=0);
+  if(!last.length){toast('Nothing to undo');return;}
+  const box=$('undoList');
+  box.innerHTML=last.map((x,ix)=>`
+    <div class="pickerBtn" data-i="${x.idx}">
+      P${x.e.period} • ${x.e.ts} — ${labelFor(x.e)}
+    </div>`).join('');
+  $('undoModal').style.display='flex';
+}
+$('undoList').onclick = (e)=>{
+  const btn=e.target.closest('.pickerBtn'); if(!btn) return;
+  const idx=parseInt(btn.dataset.i,10);
+  state.events.splice(idx,1);
+  $('undoModal').style.display='none';
+  recomputeFromEvents();
+  toast('Event removed');
+};
+$('undoCancel').onclick=()=>$('undoModal').style.display='none';
+
+function recomputeFromEvents(){
+  state.countsA={shots:0,goals:0,smothers:0,badRebounds:0,bigSaves:0};
+  state.countsF={shots:0,goals:0};
+  state.team={breakawaysAgainst:0,dzTurnovers:0};
+  for(const ev of state.events){
+    switch(ev.type){
+      case 'save': state.countsA.shots++; break;
+      case 'big':  state.countsA.shots++; state.countsA.bigSaves++; break;
+      case 'goal': state.countsA.goals++; break;
+      case 'soft_goal': state.countsA.goals++; break;
+      case 'smother': state.countsA.smothers++; break;
+      case 'bad_rebound': state.countsA.badRebounds++; break;
+      case 'our_shot': state.countsF.shots++; break;
+      case 'our_goal': state.countsF.goals++; break;
+      case 'ba': state.team.breakawaysAgainst++; break;
+      case 'dz': state.team.dzTurnovers++; break;
+    }
+  }
+  refresh();
+  saveState();
 }
 
-/* constants, idb helper, state, persistence, helpers — unchanged from v3.3.1 */
-
-/* ===== NEW: display helpers for raw save% (.xxx) ===== */
-function formatRawSV(saves, SA){
-  // hockey-style: ".xxx" with three decimals; if no shots, show ".000"
-  if (SA <= 0) return '.000';
-  const v = saves / SA;
-  // toFixed(3) returns "0.xxx"; we slice off leading zero
-  return (v.toFixed(3)).slice(1);
+/* ========== Labels & Log ========== */
+function labelFor(ev){
+  switch(ev.type){
+    case 'save': return 'shot (saved)';
+    case 'big': return 'big save';
+    case 'goal': return 'goal' + (ev.ga_cause?` • ${ev.ga_cause}`:'');
+    case 'soft_goal': return 'soft goal' + (ev.ga_cause?` • ${ev.ga_cause}`:'');
+    case 'smother': return 'smother';
+    case 'bad_rebound': return 'bad rebound';
+    case 'our_shot': return `Our Shot (#${ev.num})`;
+    case 'our_goal': return `Our Goal (#${ev.num}) A:#${ev.ast??'—'}`;
+    case 'ba': return 'breakaway against';
+    case 'dz': return 'D-zone turnover';
+    default: return ev.type;
+  }
+}
+function renderLog(){
+  $('eventLog').innerHTML = state.events.slice().reverse().map(ev=>(
+    `<div class="item">P${ev.period} • ${ev.ts} — ${labelFor(ev)}</div>`
+  )).join('');
 }
 
-/* everything else (events, undo, GA context) unchanged from v3.3.1 */
+/* ========== Scoring ========== */
+/* Raw for display; stabilized for points */
+function rawSV(){ const SA=state.countsA.shots, GA=state.countsA.goals; if(SA<=0) return 0; return (SA-GA)/SA; }
+function rawShPct(){ const S=state.countsF.shots, G=state.countsF.goals; if(S<=0) return 0; return G/S; }
 
-/* ===== Scoring functions (same as v3.3.1) ===== */
-/* ... computeGoalieScore() and computeTeamScore() identical to previous version ... */
+/* goalie */
+function goalieScore(){
+  const SA=state.countsA.shots, GA=state.countsA.goals, SM=state.countsA.smothers, BR=state.countsA.badRebounds, BIG=state.countsA.bigSaves;
+  // Stabilized save% for scoring
+  const priorSA=5, priorSV=0.85;
+  const adjSV = ( (SA * Math.max(0,SA-GA)) + (priorSA * priorSV*SA) ) / ( (SA||1) * (SA + priorSA) ); // simple shrink
+  const svPts = (SA===0?50:adjSV*100)*0.6; // 0..60 (50 if SA=0)
+  // rebound control: good = smothers + (saves - GA - bad)
+  const saves = Math.max(0, SA-GA);
+  const goodReb = Math.max(0, saves - BR) + SM;
+  const rebShare = (goodReb + BR) ? goodReb / (goodReb + BR) : 0.5;
+  const rebPts = Math.min(20, Math.max(0, rebShare*20)); // 0..20
+  const softPenalty = Math.min(10, (eventsOf('soft_goal').length)*5);
+  const bigBonus = Math.min(10, BIG*1); // light bonus
+  const total = Math.round(Math.max(0, Math.min(100, svPts + rebPts + (10-softPenalty) + bigBonus)));
+  return {total, parts:{svPts:svPts.toFixed(1), rebPts:rebPts.toFixed(1), soft:softPenalty, big:BIG}};
+}
 
-/* ===== Renders — updated to show raw SV as .xxx ===== */
+/* team */
+function teamScore(){
+  const SF=state.countsF.shots, GF=state.countsF.goals;
+  const SA=state.countsA.shots, GA=state.countsA.goals;
+  const BA=state.team.breakawaysAgainst||0, DZ=state.team.dzTurnovers||0;
+  const shotShare = (SF+SA)? SF/(SF+SA) : 0.5;
+  const shEff = rawShPct(); // finishing
+  const defFin = 1 - (GA/(SA||1)); // prevent blow-ups
+  const stability = Math.max(0, 1 - (BA*0.07 + DZ*0.05)); // light penalties
+  const total = Math.round(Math.max(0, Math.min(100, (shotShare*30) + (shEff*25) + (defFin*35) + (stability*10))));
+  return {total, parts:{shotShare:shotShare.toFixed(3), shEff:shEff.toFixed(3), defFin:defFin.toFixed(3), stability:stability.toFixed(3)}};
+}
+function eventsOf(t){ return state.events.filter(e=>e.type===t); }
 
-function refreshStats(){
-  const A = state.countsA, F = state.countsF, T = state.team;
-  const K = computeGoalieScore();
-  const Team = computeTeamScore();
-
+/* ========== Refresh UI ========== */
+function refresh(){
+  const A=state.countsA, F=state.countsF;
   const saves = Math.max(0, A.shots - A.goals);
-  $('shotsVal').textContent = A.shots;
-  $('savesVal').textContent = saves;
-  $('gaVal').textContent    = A.goals;
-  $('svVal').textContent    = formatRawSV(saves, A.shots);   // <<< raw .xxx
-  $('smotherVal').textContent = A.smothers;
-  $('brVal').textContent      = A.badRebounds;
-  $('bigVal').textContent     = A.bigSaves;
-  $('sfVal').textContent      = F.shots;
-  $('gfVal').textContent      = F.goals;
-  $('shootVal').textContent   = F.shots>0 ? ((F.goals/F.shots).toFixed(3)).slice(1) : '.000'; // show our Sh% as .xxx
-  $('ssVal').textContent      = (state.countsF.shots+state.countsA.shots>0 ? ((state.countsF.shots/(state.countsF.shots+state.countsA.shots)).toFixed(3)).slice(1) : '.500');
-  $('baVal').textContent      = T.breakawaysAgainst||0;
-  $('dzVal').textContent      = T.dzTurnovers||0;
-  $('teamScoreVal').textContent = Team.total;
+  $('saVal').textContent=A.shots;
+  $('svsVal').textContent=saves;
+  $('gaVal').textContent=A.goals;
+  $('svpVal').textContent = (A.shots>0? rawSV().toFixed(3).slice(1) : '.000'); // .xxx
+  $('smVal').textContent=A.smothers;
+  $('brVal').textContent=A.badRebounds;
+  $('bigVal').textContent=A.bigSaves;
+  $('sfVal').textContent=F.shots;
+  $('gfVal').textContent=F.goals;
+  $('oshVal').textContent=(F.shots>0? rawShPct().toFixed(3).slice(1) : '.000');
 
-  const phtml = [1,2,3,4].map(p=>{
-    const v = per[p];
-    const pSaves = Math.max(0, v.A_shots - v.A_goals);
-    const svp = formatRawSV(pSaves, v.A_shots);
-    const ourShp = v.F_shots? ((v.F_goals/v.F_shots).toFixed(3)).slice(1):'.000';
-    const title = p===4?'OT':`P${p}`;
-    return `<div class="pchip"><h4>${title}</h4>
-              <div>SF-SA ${v.F_shots}-${v.A_shots} • GF-GA ${v.F_goals}-${v.A_goals} • SV ${svp} • Sh% ${ourShp}</div>
-            </div>`;
-  }).join('');
-  $('periodSummary').innerHTML = phtml;
-
-  const gsEl = $('goalieScoreNum'), tsEl = $('teamScoreNum');
-  if (gsEl && tsEl) {
-    gsEl.textContent = K.total; tsEl.textContent = Team.total;
-    [gsEl, tsEl].forEach(el => { el.classList.remove('good','warn','bad'); });
-    gsEl.classList.add(K.total>=85?'good':K.total>=70?'warn':'bad');
-    tsEl.classList.add(Team.total>=85?'good':Team.total>=70?'warn':'bad');
-  }
+  renderPeriodBox();
+  renderLog();
 }
 
-function makeSummaryTable(){
-  const rows = [];
-  const header = `<table><thead><tr>
-    <th>Period</th><th>Shots For</th><th>Shots Against</th><th>Goals For</th><th>Goals Against</th><th>Save %</th><th>Our Sh%</th>
-  </tr></thead><tbody>`;
-  for(const p of [1,2,3,4]){
-    const v = per[p];
-    const pSaves = Math.max(0, v.A_shots - v.A_goals);
-    const svp = formatRawSV(pSaves, v.A_shots);
-    const ourShp = v.F_shots? ((v.F_goals/v.F_shots).toFixed(3)).slice(1):'.000';
-    const title = p===4?'OT':p;
-    rows.push(`<tr><td>${title}</td><td>${v.F_shots}</td><td>${v.A_shots}</td><td>${v.F_goals}</td><td>${v.A_goals}</td><td>${svp}</td><td>${ourShp}</td></tr>`);
+/* Period box */
+function perAgg(){
+  const agg={1:{F:{S:0,G:0},A:{S:0,G:0}},2:{F:{S:0,G:0},A:{S:0,G:0}},3:{F:{S:0,G:0},A:{S:0,G:0}},4:{F:{S:0,G:0},A:{S:0,G:0}}};
+  for(const e of state.events){
+    const p=e.period;
+    if(e.type==='save'||e.type==='big') agg[p].A.S++;
+    if(e.type==='goal'||e.type==='soft_goal') agg[p].A.G++;
+    if(e.type==='our_shot') agg[p].F.S++;
+    if(e.type==='our_goal') agg[p].F.G++;
   }
-  const F = state.countsF, A = state.countsA;
-  const totalSaves = Math.max(0, A.shots - A.goals);
-  const totalSVP = formatRawSV(totalSaves, A.shots);
-  const ourShpT = F.shots? ((F.goals/F.shots).toFixed(3)).slice(1):'.000';
-  rows.push(`<tr><th>Total</th><th>${F.shots}</th><th>${A.shots}</th><th>${F.goals}</th><th>${A.goals}</th><th>${totalSVP}</th><th>${ourShpT}</th></tr>`);
-  const tbl = header + rows.join('') + `</tbody></table>`;
-
-  const T = perPlayerTallies();
-  const playerRows = T.order.map(n=>{
-    const s=T.shots.get(n)||0, g=T.goals.get(n)||0, a=T.assists.get(n)||0;
-    const shp = s? ((g/s).toFixed(3)).slice(1):'.000';
-    return `<tr><td>#${n}</td><td>${s}</td><td>${g}</td><td>${a}</td><td>${shp}</td></tr>`;
+  return agg;
+}
+function renderPeriodBox(){
+  const agg=perAgg();
+  const cells=[1,2,3,4].map(p=>{
+    const a=agg[p]; const svp=a.A.S? ((a.A.S-a.A.G)/a.A.S).toFixed(3).slice(1) : '—';
+    const shp=a.F.S? (a.F.G/a.F.S).toFixed(3).slice(1) : '—';
+    const tag=(p===4?'OT':`P${p}`);
+    return `<div class="card"><h3>${tag}</h3><div>${a.F.S}-${a.A.S} • ${a.F.G}-${a.A.G} • SV ${svp} • Sh% ${shp}</div></div>`;
   }).join('');
-  const playersTbl = `
-    <div class="card" style="margin-top:10px;">
-      <h3>Players</h3>
-      <table style="margin-top:6px;">
-        <thead><tr><th>Player</th><th>Shots</th><th>Goals</th><th>Assists</th><th>Sh%</th></tr></thead>
-        <tbody>${playerRows||'<tr><td colspan="5">—</td></tr>'}</tbody>
-      </table>
-    </div>`;
-  return tbl + playersTbl;
+  $('periodBox').innerHTML=cells || '';
 }
 
-function buildReadableSummary(){
-  const K = computeGoalieScore(), Team = computeTeamScore();
-  const F=state.countsF, A=state.countsA;
-  const date = state.date || new Date().toISOString().slice(0,10);
-  const opponent = state.opponent || 'Unknown opponent';
-  const level = state.level || 'U11';
+/* ========== Buttons ========== */
+$('btnShot').onclick = ()=> addEvent({type:'save'});
+$('btnBigSave').onclick = ()=> addEvent({type:'big'});
+function chooseGACause(cb){
+  // quick chooser: BA, DZ, other via prompt
+  const v = prompt('Goal context? Enter BA, DZ, or leave blank', '');
+  const cause = (v||'').trim().toUpperCase();
+  cb(cause==='BA'?'BA':cause==='DZ'?'DZ':'other');
+}
+$('btnGoal').onclick = ()=> chooseGACause(c=> addEvent({type:'goal',ga_cause:c}));
+$('btnSoftGoal').onclick = ()=> chooseGACause(c=> addEvent({type:'soft_goal',ga_cause:c}));
+$('btnSmother').onclick = ()=> addEvent({type:'smother'});
+$('btnBadRebound').onclick = ()=> addEvent({type:'bad_rebound'});
+$('btnBreakaway').onclick = ()=> addEvent({type:'ba'});
+$('btnDZTurnover').onclick = ()=> addEvent({type:'dz'});
+
+$('btnOurShot').onclick = async ()=>{
+  try{
+    const n = await pickNumber('Shooter number');
+    addEvent({type:'our_shot',num:n});
+  }catch{}
+};
+$('btnOurGoal').onclick = async ()=>{
+  try{
+    const scorer = await pickNumber('Goal scorer');
+    const assist = await pickNumber('Assist (tap number, or Cancel to skip)').catch(()=>null);
+    addEvent({type:'our_goal',num:scorer,ast:assist});
+  }catch{}
+};
+
+$('btnNextPeriod').onclick = ()=>{
+  state.period = Math.min(4, state.period+1);
+  toast(`Period ${state.period===4?'OT':state.period}`);
+  saveState();
+};
+
+/* Undo: tap = last; long press = choose list */
+let undoPressTimer=null;
+$('btnUndo').addEventListener('touchstart',()=>{undoPressTimer=setTimeout(openUndoPicker,500);});
+$('btnUndo').addEventListener('touchend',()=>{if(undoPressTimer){clearTimeout(undoPressTimer);undoLast();}});
+$('btnUndo').addEventListener('mousedown',()=>{undoPressTimer=setTimeout(openUndoPicker,500);});
+$('btnUndo').addEventListener('mouseup',()=>{if(undoPressTimer){clearTimeout(undoPressTimer);undoLast();}});
+
+/* End game -> summary + season append */
+$('btnEnd').onclick = ()=>{
+  buildSummary();
+  appendSeasonLog();
+  $('summaryPanel').classList.remove('hidden');
+  toast('Scored. Summary below.');
+};
+$('btnNew').onclick = ()=>{
+  if(!confirm('Start a new game? Current game will be cleared (season log stays).')) return;
+  state.period=1;
+  state.countsA={shots:0,goals:0,smothers:0,badRebounds:0,bigSaves:0};
+  state.countsF={shots:0,goals:0};
+  state.team={breakawaysAgainst:0,dzTurnovers:0};
+  state.events=[];
+  refresh(); saveState();
+  $('summaryPanel').classList.add('hidden');
+  toast('New game ready');
+};
+
+/* ========== Summary & CSV ========== */
+function perPlayer(){
+  const shots=new Map(), goals=new Map(), ast=new Map();
+  for(const e of state.events){
+    if(e.type==='our_shot' && e.num){shots.set(e.num,(shots.get(e.num)||0)+1);}
+    if(e.type==='our_goal' && e.num){goals.set(e.num,(goals.get(e.num)||0)+1);}
+    if(e.type==='our_goal' && e.ast){ast.set(e.ast,(ast.get(e.ast)||0)+1);}
+  }
+  const players=[...new Set([...shots.keys(),...goals.keys(),...ast.keys()])].sort((a,b)=>a-b);
+  return {shots,goals,ast,players};
+}
+function buildBreakdowns(){
+  const GK=goalieScore(), TM=teamScore();
+  const A=state.countsA, F=state.countsF;
+  const svRaw=(A.shots?((A.shots-A.goals)/A.shots).toFixed(3).slice(1):'.000');
+  const txtGK=`Save % contributed <b>${parseFloat(GK.parts.svPts).toFixed(1)}</b> points. Rebound control contributed <b>${parseFloat(GK.parts.rebPts).toFixed(1)}</b> (bad ${A.badRebounds}, smother ${A.smothers}). Soft goals impact <b>${(eventsOf('soft_goal').length*5).toFixed(1)}</b>. Big saves impact <b>${state.countsA.bigSaves}</b>.`;
+  const txtTM=`Shot share <b>${(TM.parts.shotShare*100).toFixed(0)}%</b>, finishing <b>${(TM.parts.shEff*100).toFixed(0)}%</b>, defensive finishing <b>${(TM.parts.defFin*100).toFixed(0)}%</b>, stability <b>${(TM.parts.stability*100).toFixed(0)}%</b>.`;
+  return `
+    <div class="card"><h3>Goalie Breakdown</h3><div>SV ${svRaw} → ${GK.parts.svPts} pts. Rebounds ${GK.parts.rebPts} pts. Soft goals: −${(eventsOf('soft_goal').length*5).toFixed(1)}. Big saves bonus: ${state.countsA.bigSaves}.</div></div>
+    <div class="card" style="margin-top:8px;"><h3>Team Breakdown</h3><div>${txtTM}</div></div>
+  `;
+}
+function buildSummary(){
+  const date=state.meta.date||todayStr(), opp=state.meta.opponent||'Unknown', lvl=state.meta.level||'U11';
+  const GK=goalieScore(), TM=teamScore();
+  const A=state.countsA, F=state.countsF;
+  const rawSv = (A.shots?((A.shots-A.goals)/A.shots).toFixed(3).slice(1):'.000');
+  const shPct = (F.shots?(F.goals/F.shots).toFixed(3).slice(1):'.000');
+  $('summaryHdr').textContent=`Game Summary — ${opp} • ${lvl} • ${date}`;
+  $('goalieScoreNum').textContent=GK.total;
+  $('teamScoreNum').textContent=TM.total;
+  for(const el of ['goalieScoreNum','teamScoreNum']){
+    const x=$(el); x.classList.remove('good','warn','bad');
+    const v=parseInt(x.textContent,10);
+    x.classList.add(v>=85?'good':v>=70?'warn':'bad');
+  }
+  $('breakdowns').innerHTML = buildBreakdowns();
+
+  $('gameInfo').innerHTML = `
+    <h3>Game Info</h3>
+    <div><b>Date:</b> ${date}</div>
+    <div><b>Opponent:</b> ${opp} (${lvl})</div>`;
+
+  $('scoresCard').innerHTML = `
+    <h3>Scores</h3>
+    <div><b>Team Score:</b> ${TM.total} / 100</div>
+    <div><b>Goalie Score:</b> ${GK.total} / 100</div>`;
+
   const gaBA = state.events.filter(e=> (e.type==='goal'||e.type==='soft_goal') && e.ga_cause==='BA').length;
   const gaDZ = state.events.filter(e=> (e.type==='goal'||e.type==='soft_goal') && e.ga_cause==='DZ').length;
   const gaOther = state.events.filter(e=> (e.type==='goal'||e.type==='soft_goal') && (!e.ga_cause || e.ga_cause==='other')).length;
-  const ourShPct = F.shots? ((F.goals/F.shots).toFixed(3)).slice(1) : '.000';
-  const rawSV = formatRawSV(Math.max(0, A.shots - A.goals), A.shots);
 
-  return `
-  <div class="card">
-    <h3>Game Info</h3>
-    <div><b>Date:</b> ${date}</div>
-    <div><b>Opponent:</b> ${opponent} (${level})</div>
-  </div>
-
-  <div class="card" style="margin-top:8px;">
-    <h3>Scores</h3>
-    <div><b>Team Score:</b> ${Team.total} / 100</div>
-    <div><b>Goalie Score:</b> ${K.total} / 100</div>
-  </div>
-
-  <div class="card" style="margin-top:8px;">
+  $('teamStatsCard').innerHTML = `
     <h3>Team Stats</h3>
-    <div>Shots For: <b>${F.shots}</b> | Goals For: <b>${F.goals}</b> | Shooting %: <b>${ourShPct}</b></div>
-    <div>Shots Against: <b>${A.shots}</b> | Goals Against: <b>${A.goals}</b> | Save %: <b>${rawSV}</b></div>
-    <div>Goals Against off Breakaway: <b>${gaBA}</b> | off D-zone Turnover: <b>${gaDZ}</b> | Other: <b>${gaOther}</b></div>
-  </div>
+    <div>Shots For: <b>${F.shots}</b> • Goals For: <b>${F.goals}</b> • Shooting %: <b>${shPct}</b></div>
+    <div>Shots Against: <b>${A.shots}</b> • Goals Against: <b>${A.goals}</b> • Save %: <b>${rawSv}</b></div>
+    <div>Goals Against off Breakaway: <b>${gaBA}</b> • off D-zone Turnover: <b>${gaDZ}</b> • Other: <b>${gaOther}</b></div>
   `;
+
+  // Tables
+  const agg=perAgg();
+  const rows=[1,2,3,4].map(p=>{
+    const a=agg[p];
+    const svp=a.A.S?((a.A.S-a.A.G)/a.A.S).toFixed(3).slice(1):'—';
+    const shp=a.F.S?(a.F.G/a.F.S).toFixed(3).slice(1):'—';
+    return `<tr><td>${p===4?'OT':p}</td><td>${a.F.S}</td><td>${a.A.S}</td><td>${a.F.G}</td><td>${a.A.G}</td><td>${svp}</td><td>${shp}</td></tr>`;
+  }).join('');
+  const totSVP = A.shots?((A.shots-A.goals)/A.shots).toFixed(3).slice(1):'.000';
+  const totShP = F.shots?(F.goals/F.shots).toFixed(3).slice(1):'.000';
+  const perTbl=`<div class="card"><h3>Periods</h3>
+    <table><thead><tr><th>Period</th><th>Shots For</th><th>Shots Against</th><th>Goals For</th><th>Goals Against</th><th>Save %</th><th>Our Sh%</th></tr></thead>
+    <tbody>${rows}<tr><th>Total</th><th>${F.shots}</th><th>${A.shots}</th><th>${F.goals}</th><th>${A.goals}</th><th>${totSVP}</th><th>${totShP}</th></tr></tbody></table></div>`;
+
+  const PP=perPlayer();
+  const prow = PP.players.map(n=>{
+    const s=PP.shots.get(n)||0, g=PP.goals.get(n)||0, a=PP.ast.get(n)||0;
+    const sp=s? (g/s).toFixed(3).slice(1):'.000';
+    return `<tr><td>#${n}</td><td>${s}</td><td>${g}</td><td>${a}</td><td>${sp}</td></tr>`;
+  }).join('') || '<tr><td colspan="5">—</td></tr>';
+  const playersTbl=`<div class="card" style="margin-top:8px;"><h3>Players</h3>
+  <table><thead><tr><th>Player</th><th>Shots</th><th>Goals</th><th>Assists</th><th>Sh%</th></tr></thead>
+  <tbody>${prow}</tbody></table></div>`;
+
+  $('tablesCard').innerHTML = perTbl + playersTbl;
 }
 
-/* the rest of the file (exports, roster/picker, wiring, init) stays the same as v3.3.1 */
+/* CSV export (filename includes date + opponent) */
+function exportCSV(){
+  const date=state.meta.date||todayStr(), opp=(state.meta.opponent||'Unknown').replace(/[^a-z0-9-_]+/gi,'_');
+  const PP=perPlayer(); const A=state.countsA, F=state.countsF;
+  const header=['Period','Time','Type','Detail'];
+  const lines=[header.join(',')];
+  for(const e of state.events){
+    const d=labelFor(e).replace(/,/g,';');
+    lines.push([e.period,e.ts,e.type,d].join(','));
+  }
+  lines.push('');
+  lines.push('Totals,,,,');
+  lines.push(`Shots For,${F.shots}`);
+  lines.push(`Goals For,${F.goals}`);
+  lines.push(`Shots Against,${A.shots}`);
+  lines.push(`Goals Against,${A.goals}`);
+  lines.push('');
+  lines.push('Player,Shots,Goals,Assists,Sh%');
+  for(const n of PP.players){
+    const s=PP.shots.get(n)||0, g=PP.goals.get(n)||0, a=PP.ast.get(n)||0;
+    const sp=s? (g/s).toFixed(3).slice(1):'.000';
+    lines.push(`#${n},${s},${g},${a},${sp}`);
+  }
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=`${date}_${opp}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* Copy summary (plain text) */
+function copySummary(){
+  const text = $('summaryPanel').innerText.replace(/\n{3,}/g,'\n\n');
+  navigator.clipboard.writeText(text).then(()=>toast('Summary copied'));
+}
+
+/* Season log */
+function appendSeasonLog(){
+  const snap = JSON.parse(JSON.stringify(state));
+  snap.scoredAt = new Date().toISOString();
+  seasonLog.push(snap);
+  saveSeason();
+}
+function exportSeason(){
+  if(!seasonLog.length){toast('Season log is empty');return;}
+  const lines=['Date,Opponent,Level,TeamScore,GoalieScore,ShotsFor,GoalsFor,ShotsAgainst,GoalsAgainst'];
+  for(const g of seasonLog){
+    const GK=(()=>{ // recompute
+      const st=JSON.parse(JSON.stringify(g));
+      state=st; const r=goalieScore(); state=st; return r.total;
+    })();
+    const TM=(()=>{ const st=JSON.parse(JSON.stringify(g)); state=st; const r=teamScore(); state=st; return r.total;})();
+    lines.push([g.meta.date,g.meta.opponent,g.meta.level,TM,GK,g.countsF.shots,g.countsF.goals,g.countsA.shots,g.countsA.goals].join(','));
+  }
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='season_log.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+function resetSeason(){
+  if(!confirm('Reset the entire season log? This cannot be undone.')) return;
+  seasonLog=[]; saveSeason(); toast('Season log reset');
+}
+
+/* ========== Setup & Init ========== */
+function wire(){
+  $('gdate').value = todayStr();
+  document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{state.period=parseInt(b.dataset.p,10); toast(`Period ${state.period===4?'OT':state.period}`); saveState();});
+  $('btnExportCSV').onclick=exportCSV;
+  $('btnCopySummary').onclick=copySummary;
+  $('btnExportSeason').onclick=exportSeason;
+  $('btnResetSeason').onclick=resetSeason;
+}
+function loadMetaFromInputs(){
+  state.meta.opponent=$('opponent').value||state.meta.opponent||'';
+  state.meta.level=$('level').value||state.meta.level||'';
+  state.meta.date=$('gdate').value||state.meta.date||todayStr();
+}
+function init(){
+  loadSeason();
+  loadState();
+  wire();
+  // seed inputs
+  $('opponent').value=state.meta.opponent||'';
+  $('level').value=state.meta.level||'';
+  $('gdate').value=state.meta.date||todayStr();
+  refresh();
+}
+init();
+
+/* Service worker (simple cache) */
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('service-worker.js'));
+}
 </script>
 </body>
 </html>
