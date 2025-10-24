@@ -6,7 +6,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<title>Team Tracker – iPhone (v3.3.0)</title>
+<title>Team Tracker – iPhone (v3.4.0)</title>
 <style>
   :root{
     --bg:#0b0e11; --panel:#141922; --ink:#e8ecf1; --muted:#9aa6b2; --accent:#4da3ff;
@@ -69,6 +69,12 @@
   .undoRow:active{transform:scale(.99)}
   .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;background:#0f1e32;border:1px solid #274468;color:#d9ecff;padding:10px 12px;border-radius:12px;font-size:13px;display:none;z-index:10000}
   .toast button{margin-left:8px}
+
+  /* On-ice multi-select modal */
+  .msGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}
+  .msBtn{background:#142035;border:1px solid #2a3c5a;border-radius:10px;padding:10px 8px;text-align:center;font-weight:800;cursor:pointer}
+  .msBtn.selected{background:#1b3352;border-color:#2f5e9a}
+  .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#102035;border:1px solid #2a3c5a;font-weight:700}
 </style>
 </head>
 <body>
@@ -169,9 +175,13 @@
           <div><div class="small">Team Score</div><div id="teamScoreNum" class="score">—</div></div>
         </div>
       </div>
-      <div class="card" style="min-width:220px;">
+      <div class="card" style="min-width:240px;">
         <h3>Goalie Breakdown</h3>
         <div class="small" id="scoreBreakdown"></div>
+      </div>
+      <div class="card" style="min-width:240px;">
+        <h3>Team Breakdown</h3>
+        <div class="small" id="teamBreakdown"></div>
       </div>
     </div>
 
@@ -179,6 +189,11 @@
     <div id="summaryReadable" style="margin-top:10px; line-height:1.5"></div>
 
     <div id="summaryTableWrap" style="margin-top:10px;"></div>
+
+    <div class="card" style="margin-top:10px;">
+      <h3>Goal Against Context Summary</h3>
+      <div class="small" id="gaContextSummary"></div>
+    </div>
   </section>
 </div>
 
@@ -221,6 +236,38 @@
     <div class="rowbtn" style="margin-top:8px;">
       <button class="btn" id="pickerUnknown">Unknown</button>
       <button class="btn undo" id="pickerCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- On-ice multi-select modal -->
+<div class="modal" id="onIceModal" role="dialog" aria-modal="true" aria-labelledby="onIceTitle">
+  <div class="box">
+    <div class="inlineRow" style="justify-content:space-between;">
+      <div id="onIceTitle" class="small">Select the other three skaters</div>
+      <div class="small"><span class="pill" id="onIceCount">0/3</span></div>
+    </div>
+    <div class="msGrid" id="onIceGrid"></div>
+    <div class="rowbtn" style="margin-top:8px;">
+      <button class="btn" id="onIceUnknown">Unknown</button>
+      <button class="btn" id="onIceDone">Done</button>
+      <button class="btn undo" id="onIceCancel">Skip</button>
+    </div>
+  </div>
+</div>
+
+<!-- GA on-ice optional picker -->
+<div class="modal" id="gaOnIceModal" role="dialog" aria-modal="true" aria-labelledby="gaOnIceTitle">
+  <div class="box">
+    <div class="inlineRow" style="justify-content:space-between;">
+      <div id="gaOnIceTitle" class="small">Our skaters on ice for GA (optional)</div>
+      <div class="small"><span class="pill" id="gaOnIceCount">0/5</span></div>
+    </div>
+    <div class="msGrid" id="gaOnIceGrid"></div>
+    <div class="rowbtn" style="margin-top:8px;">
+      <button class="btn" id="gaOnIceUnknown">Unknown</button>
+      <button class="btn" id="gaOnIceDone">Done</button>
+      <button class="btn undo" id="gaOnIceSkip">Skip</button>
     </div>
   </div>
 </div>
@@ -292,9 +339,10 @@ const SEASON_KEY = 'team-tracker-season';
 
 /* ===== State ===== */
 const state = {
+  schema:'3.4.0',
   opponent:'', level:'U11', date:null, period:1,
   startedAt:new Date().toISOString(), gameId:Math.random().toString(36).slice(2),
-  events:[], // {id,type,tISO,period,player?,assist?,ga_ctx?,ga_cause?,goodRebound?}
+  events:[], // {id,type,tISO,period,player?,assist?,on_ice?,ga_ctx?,ga_cause?,ga_on_ice?,goodRebound?}
   countsA:{shots:0, goals:0, softGoals:0, smothers:0, badRebounds:0, bigSaves:0},
   countsF:{shots:0, goals:0},
   team:{breakawaysAgainst:0, dzTurnovers:0},
@@ -334,7 +382,7 @@ function fmtTime(iso){ const d=new Date(iso);
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
 }
 function clamp01(x){ return Math.max(0, Math.min(1, x)); }
-function dot3(num, den, fallback='.000'){ return den>0 ? (num/den).toFixed(3).slice(1) : fallback; }
+function dot3(frac){ return (Number.isFinite(frac) ? frac : 0).toFixed(3).slice(1); } // -> ".XYZ"
 
 /* ===== Event accounting ===== */
 function bump(type, period){
@@ -374,7 +422,7 @@ function revert(ev){
   save();
 }
 
-/* Undo interactions (long-press modal) */
+/* Undo interactions */
 let undoHoldTimer=null, undoHeld=false;
 function startUndoHold(){ undoHeld=false; undoHoldTimer=setTimeout(()=>{ undoHeld=true; showUndoModal(); }, 600); }
 function endUndoHold(){ if(undoHoldTimer){ clearTimeout(undoHoldTimer); undoHoldTimer=null; } if(!undoHeld){ undo(); } }
@@ -396,7 +444,7 @@ function showToast(msg, evToRestore){
 }
 function showUndoModal(){
   const list = $('undoList');
-  const last = state.events.slice(-5).reverse();
+  const last = state.events.slice(-5).reverse(); // last 5
   if(!last.length){ return; }
   list.innerHTML = last.map(ev=>`<div class="undoRow" data-id="${ev.id}">
       <div><b>P${ev.period}</b> • ${fmtTime(ev.tISO)}</div>
@@ -424,9 +472,16 @@ function labelFor(ev){
                      .replace('breakaway_against','Breakaway Against').replace('dz_turnover','D-Zone Turnover')
                      .replace('_',' ');
   if(ev.player) label += ` (#${ev.player})`;
-  if(ev.assist) label += ` A:${ev.assist==='None'?'—':('#'+ev.assist)}`;
+  if(ev.assist) label += ` A:${ev.assist==='None'?'—':(ev.assist==='Unknown'?'?':('#'+ev.assist))}`;
   if(ev.ga_ctx) label += ` {${ev.ga_ctx}}`;
   if(ev.ga_cause) label += ` <${ev.ga_cause}>`;
+  if(ev.on_ice && ev.on_ice.length){
+    const others = ev.on_ice.filter(n=>n!==ev.player && n!==ev.assist);
+    if(others.length) label += ` [on-ice:${others.map(x=>x==='Unknown'?'?':('#'+x)).join(', ')}]`;
+  }
+  if(ev.ga_on_ice && ev.ga_on_ice.length){
+    label += ` [our-on-ice:${ev.ga_on_ice.map(x=>x==='Unknown'?'?':('#'+x)).join(', ')}]`;
+  }
   return label;
 }
 
@@ -460,9 +515,15 @@ function openGAContext(ev){
 $('gaGrid').addEventListener('click', e=>{
   const chip = e.target.closest('.pickerBtn'); if(!chip || !lastGAEvent) return;
   lastGAEvent.ga_ctx = chip.dataset.t;
-  save(); $('gaOverlay').style.display='none'; lastGAEvent=null;
+  save(); $('gaOverlay').style.display='none'; 
+  // after GA context, optionally collect our on-ice for minus tracking
+  setTimeout(()=> openGAOnIcePicker(lastGAEvent), 60);
+  lastGAEvent=null;
 });
-$('gaSkip').addEventListener('click', ()=>{ $('gaOverlay').style.display='none'; lastGAEvent=null; });
+$('gaSkip').addEventListener('click', ()=>{
+  $('gaOverlay').style.display='none';
+  if(lastGAEvent){ setTimeout(()=> openGAOnIcePicker(lastGAEvent), 60); lastGAEvent=null; }
+});
 function tagGACause(gaEv){
   const tGA = new Date(gaEv.tISO).getTime();
   const lookback = tGA - 10000;
@@ -476,7 +537,96 @@ function tagGACause(gaEv){
   save();
 }
 
-/* Scoring (unchanged math; display uses raw) */
+/* ===== On-ice multi-select for Our Goal (other three) ===== */
+let pendingOnIce = null; // {goalEventId, mode:'GF'|'GA', max, destField}
+function buildMSGrid(gridId, preselectedSet=new Set()){
+  const grid=$(gridId); const roster=(state.roster||[]);
+  const uniq = Array.from(new Set(roster.map(x=>String(x).trim()).filter(Boolean)))
+                    .sort((a,b)=>{const na=+a, nb=+b; const an=isNaN(na), bn=isNaN(nb); if(an&&bn) return (''+a).localeCompare(''+b); if(an) return 1; if(bn) return -1; return na-nb;});
+  grid.innerHTML = uniq.map(n=>`<div class="msBtn ${preselectedSet.has(n)?'selected':''}" data-n="${n}">#${n}</div>`).join('');
+}
+function openOnIcePicker(goalEv, scorer, assist){
+  pendingOnIce = {goalEventId: goalEv.id, mode:'GF', max:3, destField:'on_ice'};
+  $('onIceTitle').textContent = 'Select the other three skaters';
+  $('onIceCount').textContent = '0/3';
+  buildMSGrid('onIceGrid');
+  $('onIceModal').style.display='flex';
+}
+function closeOnIcePicker(){ $('onIceModal').style.display='none'; pendingOnIce=null; }
+$('onIceGrid').addEventListener('click', e=>{
+  const btn=e.target.closest('.msBtn'); if(!btn||!pendingOnIce) return;
+  const sel = btn.classList.toggle('selected');
+  const grid = $('onIceGrid');
+  const selected = [...grid.querySelectorAll('.msBtn.selected')].map(b=>b.dataset.n);
+  if(selected.length > pendingOnIce.max){
+    btn.classList.remove('selected'); // undo extra
+    return;
+  }
+  $('onIceCount').textContent = `${selected.length}/${pendingOnIce.max}`;
+});
+$('onIceUnknown').addEventListener('click', ()=>{
+  if(!pendingOnIce) return;
+  // Mark unknown by storing 'Unknown' entries to fill remaining
+  const gridSelCount = $('onIceGrid').querySelectorAll('.msBtn.selected').length;
+  const remain = Math.max(0, pendingOnIce.max - gridSelCount);
+  const ev = state.events.find(e=>e.id===pendingOnIce.goalEventId);
+  if(!ev) return;
+  const extras = [...$('onIceGrid').querySelectorAll('.msBtn.selected')].map(b=>b.dataset.n);
+  const pack = [];
+  // include scorer + assist if present
+  if(ev.player) pack.push(ev.player);
+  if(ev.assist && ev.assist!=='Unknown' && ev.assist!=='None') pack.push(ev.assist);
+  pack.push(...extras);
+  for(let i=0;i<remain;i++) pack.push('Unknown');
+  ev.on_ice = Array.from(new Set(pack)); save(); closeOnIcePicker(); renderAll();
+});
+$('onIceDone').addEventListener('click', ()=>{
+  if(!pendingOnIce) return;
+  const ev = state.events.find(e=>e.id===pendingOnIce.goalEventId); if(!ev) return;
+  const extras = [...$('onIceGrid').querySelectorAll('.msBtn.selected')].map(b=>b.dataset.n);
+  const pack = [];
+  if(ev.player) pack.push(ev.player);
+  if(ev.assist && ev.assist!=='Unknown' && ev.assist!=='None') pack.push(ev.assist);
+  pack.push(...extras);
+  ev.on_ice = Array.from(new Set(pack));
+  save(); closeOnIcePicker(); renderAll();
+});
+$('onIceCancel').addEventListener('click', ()=>{ closeOnIcePicker(); });
+
+/* ===== Optional GA on-ice (for minuses) ===== */
+let pendingGAOnIce = null;
+function openGAOnIcePicker(gaEv){
+  pendingGAOnIce = {gaEventId: gaEv.id, max:5};
+  $('gaOnIceTitle').textContent = 'Our skaters on ice for GA (optional)';
+  $('gaOnIceCount').textContent = '0/5';
+  buildMSGrid('gaOnIceGrid');
+  $('gaOnIceModal').style.display='flex';
+}
+function closeGAOnIcePicker(){ $('gaOnIceModal').style.display='none'; pendingGAOnIce=null; }
+$('gaOnIceGrid').addEventListener('click', e=>{
+  const btn=e.target.closest('.msBtn'); if(!btn||!pendingGAOnIce) return;
+  const sel = btn.classList.toggle('selected');
+  const selected = [...$('gaOnIceGrid').querySelectorAll('.msBtn.selected')].map(b=>b.dataset.n);
+  if(selected.length > pendingGAOnIce.max){
+    btn.classList.remove('selected'); return;
+  }
+  $('gaOnIceCount').textContent = `${selected.length}/${pendingGAOnIce.max}`;
+});
+$('gaOnIceUnknown').addEventListener('click', ()=>{
+  if(!pendingGAOnIce) return;
+  const ev = state.events.find(e=>e.id===pendingGAOnIce.gaEventId); if(!ev) return;
+  ev.ga_on_ice = ['Unknown']; save(); closeGAOnIcePicker(); renderAll();
+});
+$('gaOnIceDone').addEventListener('click', ()=>{
+  if(!pendingGAOnIce) return;
+  const ev = state.events.find(e=>e.id===pendingGAOnIce.gaEventId); if(!ev) return;
+  const sel = [...$('gaOnIceGrid').querySelectorAll('.msBtn.selected')].map(b=>b.dataset.n);
+  ev.ga_on_ice = Array.from(new Set(sel));
+  save(); closeGAOnIcePicker(); renderAll();
+});
+$('gaOnIceSkip').addEventListener('click', ()=> closeGAOnIcePicker());
+
+/* Scoring */
 function computeGoalieScore(){
   const C = state.countsA;
   const shots = C.shots, ga = C.goals, saves = Math.max(0, shots - ga);
@@ -502,16 +652,10 @@ function computeTeamScore(){
   const SF = state.countsF.shots, SA = state.countsA.shots;
   const GF = state.countsF.goals, GA = state.countsA.goals;
 
-  const SS = (SF+SA)>0 ? SF/(SF+SA) : 0.5;
-  const scoreSS = 35 * SS;
-
-  const Fin = SF>0 ? GF/SF : 0;
-  const scoreFin = 20 * Math.min(1, Fin/0.30);
-
-  const d = (GF - GA)/Math.max(1, SF+SA);
+  const SS = (SF+SA)>0 ? SF/(SF+SA) : 0.5;      // shot share
+  const Fin = SF>0 ? GF/SF : 0;                 // finishing
+  const d = (GF - GA)/Math.max(1, SF+SA);       // impact (normalized diff)
   const Impact = clamp01(0.5 + 3*d);
-  const scoreImp = 30 * Impact;
-
   const ssPeriods = [1,2,3,4].map(p=>{
     const sfp = per[p].F_shots, sap = per[p].A_shots;
     const den = (sfp + sap);
@@ -524,30 +668,59 @@ function computeTeamScore(){
     sigma = Math.sqrt(varr);
   }
   const Stability = clamp01(1 - (sigma/0.25));
-  const scoreStab = 12 * Stability;
 
   const BA = state.team.breakawaysAgainst || 0;
   const DZ = state.team.dzTurnovers || 0;
+
+  const scoreSS = 35 * SS;
+  const scoreFin = 20 * Math.min(1, Fin/0.30);
+  const scoreImp = 30 * Impact;
+  const scoreStab = 12 * Stability;
   const modBA = Math.min(12, 3*BA);
   const modDZ = Math.min(12, 1.5*DZ);
 
   let total = Math.round(scoreSS + scoreFin + scoreImp + scoreStab - modBA - modDZ);
   if(total<0) total=0; if(total>100) total=100;
 
-  return {total, scoreSS, scoreFin, scoreImp, scoreStab, BA, DZ, SS, Fin};
+  return {total, SS, Fin, Impact, Stability, BA, DZ, scoreSS, scoreFin, scoreImp, scoreStab, modBA, modDZ};
 }
 function shotShare(){ const sf = state.countsF.shots, sa = state.countsA.shots; const d = sf+sa; return d>0 ? (sf/d) : 0.5; }
 
-/* Per-player tallies (goal counts as a shot) */
+/* Per-player tallies (goal counts as a shot) & plus/minus */
 function perPlayerTallies(){
   const shots = new Map(), goals = new Map(), assists = new Map(), all=new Set();
   for(const ev of state.events){
     if((ev.type==='for_shot' || ev.type==='for_goal') && ev.player){ shots.set(ev.player,(shots.get(ev.player)||0)+1); all.add(ev.player); }
     if(ev.type==='for_goal' && ev.player){ goals.set(ev.player,(goals.get(ev.player)||0)+1); all.add(ev.player); }
-    if(ev.type==='for_goal' && ev.assist && ev.assist!=='None'){ assists.set(ev.assist,(assists.get(ev.assist)||0)+1); all.add(ev.assist); }
+    if(ev.type==='for_goal' && ev.assist && ev.assist!=='None' && ev.assist!=='Unknown'){ assists.set(ev.assist,(assists.get(ev.assist)||0)+1); all.add(ev.assist); }
+    if(ev.type==='for_goal' && Array.isArray(ev.on_ice)){
+      for(const n of ev.on_ice){ if(n && n!=='Unknown'){ all.add(n); } }
+    }
+    if((ev.type==='goal' || ev.type==='soft_goal') && Array.isArray(ev.ga_on_ice)){
+      for(const n of ev.ga_on_ice){ if(n && n!=='Unknown'){ all.add(n); } }
+    }
   }
   const order=[...all].sort((a,b)=>{const na=+a, nb=+b; const an=isNaN(na), bn=isNaN(nb); if(an&&bn) return (''+a).localeCompare(''+b); if(an) return 1; if(bn) return -1; return na-nb;});
   return {shots, goals, assists, order};
+}
+function computePlusMinus(){
+  const pm = new Map();
+  function plus(n){ if(!n || n==='Unknown') return; pm.set(n,(pm.get(n)||0)+1); }
+  function minus(n){ if(!n || n==='Unknown') return; pm.set(n,(pm.get(n)||0)-1); }
+  for(const ev of state.events){
+    if(ev.type==='for_goal'){
+      const on = Array.isArray(ev.on_ice)? ev.on_ice.slice(): [];
+      // ensure scorer/assist included if not in on_ice yet
+      if(ev.player && !on.includes(ev.player)) on.push(ev.player);
+      if(ev.assist && ev.assist!=='Unknown' && ev.assist!=='None' && !on.includes(ev.assist)) on.push(ev.assist);
+      on.forEach(plus);
+    }
+    if(ev.type==='goal' || ev.type==='soft_goal'){
+      const on = Array.isArray(ev.ga_on_ice)? ev.ga_on_ice.slice(): [];
+      on.forEach(minus);
+    }
+  }
+  return pm;
 }
 
 /* Render */
@@ -563,29 +736,23 @@ function refreshStats(){
   $('shotsVal').textContent = A.shots;
   $('savesVal').textContent = K.saves;
   $('gaVal').textContent    = A.goals;
-
-  // Display RAW save % as .XXX
-  const svDot = dot3(Math.max(0, A.shots - A.goals), A.shots, '.000');
-  $('svVal').textContent = svDot;
-
+  $('svVal').textContent    = dot3(K.sv);
   $('smotherVal').textContent = A.smothers;
   $('brVal').textContent      = A.badRebounds;
   $('bigVal').textContent     = A.bigSaves;
   $('sfVal').textContent      = F.shots;
   $('gfVal').textContent      = F.goals;
-
-  // Our Shooting % and Shot Share as .XXX
-  $('shootVal').textContent   = dot3(F.goals, F.shots, '.000');
-  $('ssVal').textContent      = shotShare().toFixed(3).slice(1);
-
+  $('shootVal').textContent   = F.shots>0 ? dot3(F.goals/F.shots) : '.000';
+  $('ssVal').textContent      = dot3(shotShare());
   $('baVal').textContent      = T.breakawaysAgainst||0;
   $('dzVal').textContent      = T.dzTurnovers||0;
   $('teamScoreVal').textContent = Team.total;
 
   const phtml = [1,2,3,4].map(p=>{
     const v = per[p];
-    const svp = v.A_shots ? ((Math.max(0, v.A_shots - v.A_goals)/v.A_shots).toFixed(3).slice(1)) : '—';
-    const ourShp = v.F_shots? ((v.F_goals/v.F_shots).toFixed(3).slice(1)):'—';
+    const saves = Math.max(0, v.A_shots - v.A_goals);
+    const svp = v.A_shots ? dot3(saves/v.A_shots) : '—';
+    const ourShp = v.F_shots? dot3(v.F_goals/v.F_shots) : '—';
     const title = p===4?'OT':`P${p}`;
     return `<div class="pchip"><h4>${title}</h4>
               <div>SF-SA ${v.F_shots}-${v.A_shots} • GF-GA ${v.F_goals}-${v.A_goals} • SV ${svp} • Sh% ${ourShp}</div>
@@ -613,38 +780,42 @@ function makeSummaryTable(){
   </tr></thead><tbody>`;
   for(const p of [1,2,3,4]){
     const v = per[p];
-    const svp = v.A_shots? ((Math.max(0, v.A_shots - v.A_goals)/v.A_shots).toFixed(3).slice(1)):'—';
-    const ourShp = v.F_shots? ((v.F_goals/v.F_shots).toFixed(3).slice(1)):'—';
+    const saves = Math.max(0, v.A_shots - v.A_goals);
+    const svp = v.A_shots? dot3(saves/v.A_shots) : '—';
+    const ourShp = v.F_shots? dot3(v.F_goals/v.F_shots) : '—';
     const title = p===4?'OT':p;
     rows.push(`<tr><td>${title}</td><td>${v.F_shots}</td><td>${v.A_shots}</td><td>${v.F_goals}</td><td>${v.A_goals}</td><td>${svp}</td><td>${ourShp}</td></tr>`);
   }
   const F = state.countsF, A = state.countsA;
-  const totalSVP = dot3(Math.max(0, A.shots - A.goals), A.shots, '.000');
-  const ourShpT = dot3(F.goals, F.shots, '.000');
+  const totalSaves = Math.max(0, A.shots - A.goals);
+  const totalSVP = A.shots? dot3(totalSaves/A.shots) : '.000';
+  const ourShpT = F.shots? dot3(F.goals/F.shots) : '.000';
   rows.push(`<tr><th>Total</th><th>${F.shots}</th><th>${A.shots}</th><th>${F.goals}</th><th>${A.goals}</th><th>${totalSVP}</th><th>${ourShpT}</th></tr>`);
   const tbl = header + rows.join('') + `</tbody></table>`;
 
   const T = perPlayerTallies();
+  const PM = computePlusMinus();
   const playerRows = T.order.map(n=>{
     const s=T.shots.get(n)||0, g=T.goals.get(n)||0, a=T.assists.get(n)||0;
-    const shp = s? (g/s).toFixed(3).slice(1):'.000';
-    return `<tr><td>#${n}</td><td>${s}</td><td>${g}</td><td>${a}</td><td>${shp}</td></tr>`;
+    const shp = s? dot3(g/s) : '.000';
+    const plusMinus = PM.get(n)||0;
+    return `<tr><td>#${n}</td><td>${s}</td><td>${g}</td><td>${a}</td><td>${shp}</td><td>${plusMinus>0?'+':''}${plusMinus}</td></tr>`;
   }).join('');
   const playersTbl = `
     <div class="card" style="margin-top:10px;">
       <h3>Players</h3>
       <table style="margin-top:6px;">
-        <thead><tr><th>Player</th><th>Shots</th><th>Goals</th><th>Assists</th><th>Sh%</th></tr></thead>
-        <tbody>${playerRows||'<tr><td colspan="5">—</td></tr>'}</tbody>
+        <thead><tr><th>Player</th><th>Shots</th><th>Goals</th><th>Assists</th><th>Sh%</th><th>+/-</th></tr></thead>
+        <tbody>${playerRows||'<tr><td colspan="6">—</td></tr>'}</tbody>
       </table>
     </div>`;
   return tbl + playersTbl;
 }
 function renderAll(){ highlightPeriod(); updateMeta(); refreshStats(); refreshLog(); }
 
-/* Readable narrative summary (percentages as .XXX) */
+/* Readable narrative summary */
 function buildReadableSummary(){
-  const K = computeGoalieScore();
+  const K = computeGoalieScore(), T = computeTeamScore();
   const F=state.countsF, A=state.countsA;
   const date = state.date || new Date().toISOString().slice(0,10);
   const opponent = state.opponent || 'Unknown opponent';
@@ -652,8 +823,8 @@ function buildReadableSummary(){
   const gaBA = state.events.filter(e=> (e.type==='goal'||e.type==='soft_goal') && e.ga_cause==='BA').length;
   const gaDZ = state.events.filter(e=> (e.type==='goal'||e.type==='soft_goal') && e.ga_cause==='DZ').length;
   const gaOther = state.events.filter(e=> (e.type==='goal'||e.type==='soft_goal') && (!e.ga_cause || e.ga_cause==='other')).length;
-  const ourShPct = dot3(F.goals, F.shots, '.000');
-  const svPct = dot3(Math.max(0, A.shots - A.goals), A.shots, '.000');
+  const ourShPct = F.shots? dot3(F.goals/F.shots) : '.000';
+  const svPct = dot3(K.sv);
 
   return `
   <div class="card">
@@ -664,17 +835,35 @@ function buildReadableSummary(){
 
   <div class="card" style="margin-top:8px;">
     <h3>Scores</h3>
-    <div><b>Team Score:</b> ${computeTeamScore().total} / 100</div>
+    <div><b>Team Score:</b> ${T.total} / 100</div>
     <div><b>Goalie Score:</b> ${K.total} / 100</div>
   </div>
 
   <div class="card" style="margin-top:8px;">
     <h3>Team Stats</h3>
-    <div>Shots For: <b>${F.shots}</b> | Goals For: <b>${F.goals}</b> | Shooting %: <b>${ourShPct}</b></div>
+    <div>Shots For: <b>${F.shots}</b> | Goals For: <b>${F.goals}</b> | Shooting: <b>${ourShPct}</b></div>
     <div>Shots Against: <b>${A.shots}</b> | Goals Against: <b>${A.goals}</b> | Save %: <b>${svPct}</b></div>
-    <div>Goals Against off Breakaway: <b>${gaBA}</b> | off D-zone Turnover: <b>${gaDZ}</b> | Other: <b>${gaOther}</b></div>
+    <div>GA tags — Breakaway: <b>${gaBA}</b> | D-zone TO: <b>${gaDZ}</b> | Other: <b>${gaOther}</b></div>
   </div>
   `;
+}
+
+/* Breakdown text builders */
+function buildGoalieBreakdown(){
+  const C=state.countsA, K=computeGoalieScore();
+  return `SV ${dot3(K.sv)} → <b>${K.scoreSV.toFixed(1)}</b> pts • Rebounds <b>${K.scoreRebound.toFixed(1)}</b> (good ${K.goodRebounds}, bad ${C.badRebounds}, smother ${C.smothers}) • Soft goals <b>${K.scoreSoft.toFixed(1)}</b> • Big saves <b>${K.scoreBig.toFixed(1)}</b>`;
+}
+function buildTeamBreakdown(){
+  const T=computeTeamScore();
+  return `Shot Share <b>${dot3(T.SS)}</b> • Finishing <b>${dot3(T.Fin)}</b> • Impact <b>${dot3(T.Impact)}</b> • Stability <b>${dot3(T.Stability)}</b> • BA −${T.BA} • DZ −${T.DZ}`;
+}
+function buildGAContextSummary(){
+  const counts = new Map();
+  for(const tag of GA_TAGS){ counts.set(tag,0); }
+  const rel = state.events.filter(e=>e.type==='goal' || e.type==='soft_goal');
+  rel.forEach(e=> counts.set(e.ga_ctx || 'Other', (counts.get(e.ga_ctx||'Other')||0)+1));
+  const rows = GA_TAGS.map(t=>`${t}: <b>${counts.get(t)||0}</b>`).join(' • ');
+  return rows;
 }
 
 /* Summary flow */
@@ -690,18 +879,18 @@ function endGame(){
   gsEl.classList.add(K.total>=85?'good':K.total>=70?'warn':'bad');
   tsEl.classList.add(Team.total>=85?'good':Team.total>=70?'warn':'bad');
 
-  $('scoreBreakdown').innerHTML =
-    `Save % contributed <b>${K.scoreSV.toFixed(1)}</b> pts. Rebound control <b>${K.scoreRebound.toFixed(1)}</b> (good ${K.goodRebounds}, bad ${state.countsA.badRebounds}). Soft goals impact <b>${K.scoreSoft.toFixed(1)}</b>. Big saves <b>${K.scoreBig.toFixed(1)}</b>.`;
-
+  $('scoreBreakdown').innerHTML = buildGoalieBreakdown();
+  $('teamBreakdown').innerHTML  = buildTeamBreakdown();
   $('summaryReadable').innerHTML = buildReadableSummary();
   $('summaryTableWrap').innerHTML = makeSummaryTable();
+  $('gaContextSummary').innerHTML = buildGAContextSummary();
 
   $('summaryPanel').classList.remove('hidden');
   appendToSeasonLog(K, Team);
   window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
 }
 
-/* CSV, filenames, and copy */
+/* CSV, filenames, and copy (unchanged layout; rates kept as text) */
 function safeName(s){ return String(s||'').replace(/[^\w\d\-_.() ]/g,'_').trim().replace(/\s+/g,''); }
 function buildGameRow(K, Team){
   const F=state.countsF, A=state.countsA;
@@ -715,8 +904,8 @@ function buildGameRow(K, Team){
     teamScore: Team.total,
     goalieScore: K.total,
     SF: F.shots, SA: A.shots, GF: F.goals, GA: A.goals,
-    ourShootingPct: dot3(F.goals, F.shots, '.000'),
-    savePct: dot3(Math.max(0, A.shots - A.goals), A.shots, '.000'),
+    ourShootingPct: F.shots? (F.goals/F.shots).toFixed(3).slice(1) : '.000',
+    savePct: (K.sv).toFixed(3).slice(1),
     smothers: A.smothers, badRebounds: A.badRebounds, bigSaves: A.bigSaves, softGoals: A.softGoals,
     breakawaysAgainst: state.team.breakawaysAgainst||0, dzTurnovers: state.team.dzTurnovers||0,
     GA_off_BA: gaBA, GA_off_DZ: gaDZ, GA_other: gaOther
@@ -742,11 +931,11 @@ function gameCSV(){
   const k=computeGoalieScore(), t=computeTeamScore();
   const line1 = seasonCSV([buildGameRow(k,t)]);
   const T = perPlayerTallies();
-  const header = 'player,shots,goals,assists,sh%';
+  const PM = computePlusMinus();
+  const header = 'player,shots,goals,assists,sh%,plus_minus';
   const rows = T.order.map(n=>{
-    const s=T.shots.get(n)||0,g=T.goals.get(n)||0,a=T.assists.get(n)||0;
-    const shp = s? (g/s).toFixed(3).slice(1):'.000';
-    return `${JSON.stringify('#'+n)},${s},${g},${a},${shp}`;
+    const s=T.shots.get(n)||0,g=T.goals.get(n)||0,a=T.assists.get(n)||0, shp = s? (g/s).toFixed(3).slice(1):'.000', pm=(PM.get(n)||0);
+    return `${JSON.stringify('#'+n)},${s},${g},${a},${shp},${pm>0?'+':''}${pm}`;
   }).join('\r\n');
   return line1 + '\r\n' + header + '\r\n' + rows + '\r\n';
 }
@@ -815,7 +1004,7 @@ $('pickerAdd').addEventListener('click', ()=>{
   const v=$('pickerInput').value.trim(); if(!v) return;
   handlePickerSelection(v,true);
 });
-$('pickerUnknown').addEventListener('click', ()=>{ if(!pendingType) return; handlePickerSelection('?',true); });
+$('pickerUnknown').addEventListener('click', ()=>{ if(!pendingType) return; handlePickerSelection('Unknown',true); });
 $('pickerCancel').addEventListener('click', ()=>{ closePicker(); pendingScorer=null; });
 
 function handlePickerSelection(num, allowAdd){
@@ -832,9 +1021,14 @@ function handlePickerSelection(num, allowAdd){
     return;
   }
   if(pendingType==='for_goal_assist'){
-    const assist = num==='?' ? 'Unknown' : num;
-    addEvent('for_goal',{player: pendingScorer, assist});
-    pendingScorer=null; closePicker(); return;
+    const assist = num==='Unknown' ? 'Unknown' : num;
+    const ev = { player: pendingScorer, assist };
+    addEvent('for_goal', ev);
+    const created = state.events[state.events.length-1];
+    pendingScorer=null; closePicker();
+    // after assist, open the "other three" on-ice picker
+    setTimeout(()=> openOnIcePicker(created, created.player, created.assist), 80);
+    return;
   }
   if(pendingType==='for_goal'){ addEvent('for_goal',{player:num}); closePicker(); }
 }
@@ -863,8 +1057,10 @@ $('btnReset').addEventListener('click', ()=>{
   $('summaryPanel').classList.add('hidden');
   $('summaryTitle').textContent='Game Summary';
   $('goalieScoreNum').textContent='—'; $('teamScoreNum').textContent='—';
-  $('scoreBreakdown').textContent=''; $('summaryTableWrap').innerHTML='';
+  $('scoreBreakdown').textContent=''; $('teamBreakdown').textContent='';
+  $('summaryTableWrap').innerHTML='';
   $('summaryReadable').innerHTML='';
+  $('gaContextSummary').innerHTML='';
 
   state.opponent=''; state.level='U11'; state.date=null; state.period=1;
   state.startedAt=new Date().toISOString(); state.gameId=Math.random().toString(36).slice(2);
@@ -908,7 +1104,7 @@ $('periodChips').addEventListener('click', async e=>{
 });
 
 /* Modal backdrops */
-['rosterModal','pickerModal','copyModal','gaOverlay','undoModal'].forEach(id=>{
+['rosterModal','pickerModal','copyModal','gaOverlay','undoModal','onIceModal','gaOnIceModal'].forEach(id=>{
   $(id).addEventListener('click', (e)=>{ if(e.target === $(id)) $(id).style.display='none'; });
 });
 
