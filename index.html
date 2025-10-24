@@ -6,7 +6,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<title>Team Tracker – iPhone (v3.3.4)</title>
+<title>Team Tracker – iPhone (v3.3.5)</title>
 <style>
   :root{
     --bg:#0b0e11; --panel:#141922; --ink:#e8ecf1; --muted:#9aa6b2; --accent:#4da3ff;
@@ -50,7 +50,7 @@
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:16px;z-index:9999}
   .modal .box{background:#0e1320;border:1px solid #2a3a55;border-radius:12px;max-width:520px;width:100%;padding:12px}
   .modal textarea{width:100%;height:220px;background:#0b1220;color:#e8ecf1;border:1px solid #243248;border-radius:10px;padding:8px;font-size:14px}
-  .modal .rowbtn{display:flex;gap:10px;margin-top:8px}
+  .modal .rowbtn{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
   .mini{font-size:11px;color:#a6b3c2}
   .pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
   .pchip{background:#0f1a28;border:1px solid #223045;border-radius:10px;padding:8px}
@@ -58,7 +58,7 @@
   .pchip div{font-size:13px;font-weight:700}
   .pickerGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}
   .pickerBtn{background:#152033;border:1px solid #2a3c5a;border-radius:10px;padding:12px 8px;text-align:center;font-weight:800;cursor:pointer;user-select:none}
-  .pickerBtn.selected{outline:2px solid #4da3ff; background:#13243b;}
+  .pickerBtn.selected{outline:2px solid var(--accent); background:#13243b;}
   .inlineRow{display:flex;gap:8px;align-items:center}
   table{width:100%;border-collapse:collapse}
   th,td{border:1px solid #233044;padding:6px 8px;font-size:12px}
@@ -78,7 +78,7 @@
     <h1>Team Tracker</h1>
     <div class="inlineRow">
       <button class="btn roster" id="btnRoster" type="button" aria-haspopup="dialog" aria-controls="rosterModal">Roster</button>
-      <div class="tag" id="gameMetaTag">New game • v3.3.4</div>
+      <div class="tag" id="gameMetaTag">New game • v3.3.5</div>
     </div>
   </header>
 
@@ -237,20 +237,22 @@
   </div>
 </div>
 
-<!-- NEW: On-Ice multi picker (for Goals Against) -->
+<!-- Multi picker (reused for GA 5 and GF "other three") -->
 <div class="modal" id="onIceModal" role="dialog" aria-modal="true" aria-labelledby="onIceTitle">
   <div class="box">
     <div class="inlineRow" style="justify-content:space-between;">
-      <div id="onIceTitle" class="small">Select FIVE players on ice (GA)</div>
-      <div class="small"><span id="onIceCount">0</span>/5 selected</div>
+      <div id="onIceTitle" class="small">Select players on ice</div>
+      <div class="small"><span id="onIceCount">0</span>/<span id="onIceMax">5</span> selected</div>
     </div>
     <div class="pickerGrid" id="onIceGrid"></div>
-    <div class="rowbtn" style="margin-top:8px;flex-wrap:wrap;">
-      <button class="btn" id="onIceUnknown">Unknown</button>
+    <div class="rowbtn" style="margin-top:8px;">
+      <button class="btn" id="onIceUnknownPlus">Unknown +</button>
+      <button class="btn" id="onIceUnknownMinus">Unknown −</button>
       <button class="btn" id="onIceClear">Clear</button>
       <button class="btn" id="onIceUse">Use</button>
       <button class="btn undo" id="onIceCancel">Skip</button>
     </div>
+    <div class="small" id="onIceUnknownBadge" style="margin-top:6px;">Unknown ×0</div>
   </div>
 </div>
 
@@ -268,7 +270,7 @@
 
 <script>
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', ()=>navigator.serviceWorker.register('service-worker.js?v=3.3.4'));
+  window.addEventListener('load', ()=>navigator.serviceWorker.register('service-worker.js?v=3.3.5'));
 }
 
 /* ===== IndexedDB KV helper ===== */
@@ -312,7 +314,8 @@ const SEASON_KEY = 'team-tracker-season';
 const state = {
   opponent:'', level:'U11', date:null, period:1,
   startedAt:new Date().toISOString(), gameId:Math.random().toString(36).slice(2),
-  events:[], // {id,type,tISO,period,player?,assist?,ga_ctx?,ga_cause?,goodRebound?, onIce?[]}
+  // Events may include: { onIce: [...], forOnIce: [...] }
+  events:[], // {id,type,tISO,period,player?,assist?,ga_ctx?,ga_cause?,goodRebound?,onIce?,forOnIce?}
   countsA:{shots:0, goals:0, softGoals:0, smothers:0, badRebounds:0, bigSaves:0},
   countsF:{shots:0, goals:0},
   team:{breakawaysAgainst:0, dzTurnovers:0},
@@ -372,6 +375,7 @@ function addEvent(type, meta={}){
   state.events.push(ev); bump(type, state.period); save(); renderAll(); vibrate();
   if(type==='shot' || type==='big_save'){ scheduleGoodReboundCredit(ev.id); }
   if(type==='goal' || type==='soft_goal'){ openGAContext(ev); tagGACause(ev); }
+  return ev;
 }
 function undo(){
   const ev = state.events.pop(); if(!ev) return; revert(ev); renderAll(); vibrate(15);
@@ -391,7 +395,7 @@ function revert(ev){
   save();
 }
 
-/* Undo interactions */
+/* Undo interactions (long-press modal preserved) */
 let undoHoldTimer=null, undoHeld=false;
 function startUndoHold(){ undoHeld=false; undoHoldTimer=setTimeout(()=>{ undoHeld=true; showUndoModal(); }, 600); }
 function endUndoHold(){ if(undoHoldTimer){ clearTimeout(undoHoldTimer); undoHoldTimer=null; } if(!undoHeld){ undo(); } }
@@ -435,6 +439,11 @@ $('undoList').addEventListener('click', e=>{
 $('undoClose').addEventListener('click', ()=> $('undoModal').style.display='none');
 
 /* Labels */
+function compressUnknown(arr){
+  const unknowns = arr.filter(x=>x==='Unknown').length;
+  const rest = arr.filter(x=>x!=='Unknown');
+  return unknowns ? [...rest, `Unknown×${unknowns}`] : rest;
+}
 function labelFor(ev){
   let label = ev.type.replace('soft_goal','Soft Goal').replace('bad_rebound','Bad Rebound')
                      .replace('for_shot','Our Shot').replace('for_goal','Our Goal')
@@ -444,8 +453,10 @@ function labelFor(ev){
   if(ev.assist) label += ` A:${ev.assist==='None'?'—':('#'+ev.assist)}`;
   if(ev.ga_ctx) label += ` {${ev.ga_ctx}}`;
   if(ev.onIce && Array.isArray(ev.onIce) && ev.onIce.length){
-    const list = ev.onIce.join(', ');
-    label += ` [On-ice: ${list}]`;
+    label += ` [On-ice: ${compressUnknown(ev.onIce).join(', ')}]`;
+  }
+  if(ev.forOnIce && Array.isArray(ev.forOnIce) && ev.forOnIce.length){
+    label += ` [For on-ice: ${compressUnknown(ev.forOnIce).join(', ')}]`;
   }
   if(ev.ga_cause) label += ` <${ev.ga_cause}>`;
   return label;
@@ -481,13 +492,15 @@ function openGAContext(ev){
 $('gaGrid').addEventListener('click', e=>{
   const chip = e.target.closest('.pickerBtn'); if(!chip || !lastGAEvent) return;
   lastGAEvent.ga_ctx = chip.dataset.t;
-  save();
-  $('gaOverlay').style.display='none';
-  openOnIcePickerGA(lastGAEvent);
+  save(); $('gaOverlay').style.display='none';
+  openMultiPicker({title:'Select FIVE players on ice (GA)', max:5, event:lastGAEvent, field:'onIce', exclude:[]});
 });
 $('gaSkip').addEventListener('click', ()=>{
   $('gaOverlay').style.display='none';
-  if(lastGAEvent){ openOnIcePickerGA(lastGAEvent); lastGAEvent=null; }
+  if(lastGAEvent){
+    openMultiPicker({title:'Select FIVE players on ice (GA)', max:5, event:lastGAEvent, field:'onIce', exclude:[]});
+    lastGAEvent=null;
+  }
 });
 function tagGACause(gaEv){
   const tGA = new Date(gaEv.tISO).getTime();
@@ -502,57 +515,71 @@ function tagGACause(gaEv){
   save();
 }
 
-/* ===== NEW: On-Ice Multi Picker for Goals Against ===== */
-let onIceSelected = new Set();
-function openOnIcePickerGA(gaEvent){
-  onIceSelected = new Set( (gaEvent.onIce && Array.isArray(gaEvent.onIce)) ? gaEvent.onIce : [] );
-  buildOnIceGrid();
-  updateOnIceCount();
+/* ===== Generic Multi Picker (supports Unknown count) ===== */
+let multiPick = {
+  selected: new Set(), // numbers only
+  unknowns: 0,
+  max: 5,
+  exclude: new Set(),
+  eventRef: null,
+  field: 'onIce'
+};
+function openMultiPicker({title, max, event, field, exclude}){
+  multiPick = { selected:new Set(), unknowns:0, max, exclude:new Set(exclude||[]), eventRef:event, field };
+  $('onIceTitle').textContent = title;
+  $('onIceMax').textContent = String(max);
   $('onIceModal').style.display='flex';
+  buildOnIceGrid();
+  updateOnIceMeta();
 }
 function buildOnIceGrid(){
   const roster = (state.roster||[]).map(x=>String(x).trim()).filter(Boolean);
-  const uniq = Array.from(new Set(roster)).sort((a,b)=>{const na=+a, nb=+b; const an=isNaN(na), bn=isNaN(nb); if(an&&bn) return (''+a).localeCompare(''+b); if(an) return 1; if(bn) return -1; return na-nb;});
+  const uniq = Array.from(new Set(roster)).filter(n=>!multiPick.exclude.has(n))
+                    .sort((a,b)=>{const na=+a, nb=+b; const an=isNaN(na), bn=isNaN(nb); if(an&&bn) return (''+a).localeCompare(''+b); if(an) return 1; if(bn) return -1; return na-nb;});
   $('onIceGrid').innerHTML = uniq.length
-    ? uniq.map(n=>`<div class="pickerBtn ${onIceSelected.has(n)?'selected':''}" data-n="${n}">#${n}</div>`).join('')
+    ? uniq.map(n=>`<div class="pickerBtn ${multiPick.selected.has(n)?'selected':''}" data-n="${n}">#${n}</div>`).join('')
     : `<div class="small">No roster yet. Add numbers in the Roster menu.</div>`;
 }
-function updateOnIceCount(){ $('onIceCount').textContent = onIceSelected.size; }
+function totalSelected(){ return multiPick.selected.size + multiPick.unknowns; }
+function updateOnIceMeta(){
+  $('onIceCount').textContent = String(totalSelected());
+  $('onIceUnknownBadge').textContent = `Unknown ×${multiPick.unknowns}`;
+}
 $('onIceGrid').addEventListener('click', e=>{
   const b = e.target.closest('.pickerBtn'); if(!b) return;
   const n = b.dataset.n;
-  if(onIceSelected.has(n)){ onIceSelected.delete(n); b.classList.remove('selected'); }
+  if(multiPick.selected.has(n)){ multiPick.selected.delete(n); b.classList.remove('selected'); }
   else{
-    if(onIceSelected.size>=5) return; // cap at 5
-    onIceSelected.add(n); b.classList.add('selected');
+    if(totalSelected()>=multiPick.max) return;
+    multiPick.selected.add(n); b.classList.add('selected');
   }
-  updateOnIceCount();
+  updateOnIceMeta();
+});
+$('onIceUnknownPlus').addEventListener('click', ()=>{
+  if(totalSelected()>=multiPick.max) return;
+  multiPick.unknowns += 1;
+  updateOnIceMeta();
+});
+$('onIceUnknownMinus').addEventListener('click', ()=>{
+  if(multiPick.unknowns>0){ multiPick.unknowns -= 1; updateOnIceMeta(); }
 });
 $('onIceClear').addEventListener('click', ()=>{
-  onIceSelected.clear();
-  buildOnIceGrid(); updateOnIceCount();
-});
-$('onIceUnknown').addEventListener('click', ()=>{
-  onIceSelected.clear();
-  onIceSelected.add('Unknown');
-  buildOnIceGrid(); // will show none selected, but we keep Unknown in set
-  updateOnIceCount();
+  multiPick.selected.clear();
+  multiPick.unknowns = 0;
+  buildOnIceGrid(); updateOnIceMeta();
 });
 $('onIceUse').addEventListener('click', ()=>{
-  if(!lastGAEvent) { $('onIceModal').style.display='none'; return; }
-  const arr = Array.from(onIceSelected);
-  if(arr.includes('Unknown') || arr.length===0){
-    lastGAEvent.onIce = ['Unknown'];
-  }else{
-    lastGAEvent.onIce = arr;
-  }
+  if(!multiPick.eventRef){ $('onIceModal').style.display='none'; return; }
+  const arr = [...multiPick.selected];
+  for(let i=0;i<multiPick.unknowns;i++) arr.push('Unknown');
+  multiPick.eventRef[multiPick.field] = arr;
   save();
   $('onIceModal').style.display='none';
-  lastGAEvent = null;
+  multiPick.eventRef = null;
 });
 $('onIceCancel').addEventListener('click', ()=>{
   $('onIceModal').style.display='none';
-  lastGAEvent = null; // skip: do not attach onIce
+  multiPick.eventRef = null; // skip
 });
 
 /* Scoring */
@@ -632,7 +659,7 @@ function perPlayerTallies(){
 /* Render */
 function updateMeta(){
   $('gameMetaTag').textContent =
-    `${state.opponent||'Opponent?'} • ${state.level||'U11'} • ${state.date||new Date().toISOString().slice(0,10)} • v3.3.4`;
+    `${state.opponent||'Opponent?'} • ${state.level||'U11'} • ${state.date||new Date().toISOString().slice(0,10)} • v3.3.5`;
 }
 function refreshStats(){
   const A = state.countsA, F = state.countsF, T = state.team;
@@ -642,7 +669,7 @@ function refreshStats(){
   $('shotsVal').textContent = A.shots;
   $('savesVal').textContent = K.saves;
   $('gaVal').textContent    = A.goals;
-  $('svVal').textContent    = A.shots>0 ? (K.sv).toFixed(3).slice(1) : '—'; // .XXX actual sv%
+  $('svVal').textContent    = A.shots>0 ? (K.sv).toFixed(3).slice(1) : '—'; // .XXX
   $('smotherVal').textContent = A.smothers;
   $('brVal').textContent      = A.badRebounds;
   $('bigVal').textContent     = A.bigSaves;
@@ -717,7 +744,7 @@ function makeSummaryTable(){
 }
 function renderAll(){ highlightPeriod(); updateMeta(); refreshStats(); refreshLog(); }
 
-/* Readable narrative summary */
+/* Readable narrative summary (unchanged but shows .XXX) */
 function buildReadableSummary(){
   const K = computeGoalieScore(), T = computeTeamScore();
   const F=state.countsF, A=state.countsA;
@@ -776,7 +803,7 @@ function endGame(){
   window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
 }
 
-/* CSV, filenames, and copy */
+/* CSV, filenames, and copy (unchanged aside from .XXX already in rows) */
 function safeName(s){ return String(s||'').replace(/[^\w\d\-_.() ]/g,'_').trim().replace(/\s+/g,''); }
 function buildGameRow(K, Team){
   const F=state.countsF, A=state.countsA;
@@ -849,12 +876,6 @@ function buildSummaryText(){
   return txtA + '\n\n' + document.getElementById('summaryTableWrap').innerText;
 }
 
-/* Copy modal */
-function openCopyModal(text){ $('copyArea').value=text; $('copyModal').style.display='flex'; setTimeout(()=>{$('copyArea').focus(); $('copyArea').select();},50); }
-$('btnCopySummary').addEventListener('click', ()=> openCopyModal(buildSummaryText()));
-$('btnCopySelect').addEventListener('click', ()=>{ $('copyArea').focus(); $('copyArea').select(); });
-$('btnCopyClose').addEventListener('click', ()=>{ $('copyModal').style.display='none'; });
-
 /* Roster & Picker (single-use) */
 function openRoster(){ $('rosterArea').value=(state.roster||[]).join('\n'); $('rosterModal').style.display='flex'; }
 function closeRoster(){ $('rosterModal').style.display='none'; }
@@ -875,7 +896,11 @@ function openPicker(type, title='Select player number'){
 function closePicker(){ $('pickerModal').style.display='none'; pendingType=null; }
 function buildPickerGrid(){
   const grid = $('pickerGrid'), roster = (state.roster||[]);
-  const uniq = Array.from(new Set(roster.map(x=>String(x).trim()).filter(Boolean)));
+  let uniq = Array.from(new Set(roster.map(x=>String(x).trim()).filter(Boolean)));
+  // Hide scorer from assist options
+  if(pendingType==='for_goal_assist' && pendingScorer){
+    uniq = uniq.filter(n=>n!==pendingScorer);
+  }
   uniq.sort((a,b)=>{const na=+a, nb=+b; const an=isNaN(na), bn=isNaN(nb); if(an&&bn) return (''+a).localeCompare(''+b); if(an) return 1; if(bn) return -1; return na-nb;});
   grid.innerHTML = uniq.length? uniq.map(n=>`<div class="pickerBtn" data-n="${n}">#${n}</div>`).join('')
                               : `<div class="small">No roster yet. Add numbers in the Roster menu.</div>`;
@@ -906,11 +931,24 @@ function handlePickerSelection(num, allowAdd){
     return;
   }
   if(pendingType==='for_goal_assist'){
+    // Block assist == scorer even on typed entry
+    if(num===pendingScorer){
+      alert('Assist cannot be the same as the scorer.'); return;
+    }
     const assist = num==='?' ? 'Unknown' : num;
-    addEvent('for_goal',{player: pendingScorer, assist});
-    pendingScorer=null; closePicker(); return;
+    const ev = addEvent('for_goal',{player: pendingScorer, assist});
+    // Now pick the other three (exclude scorer + known assist)
+    const exclude = [pendingScorer];
+    if(assist!=='Unknown') exclude.push(assist);
+    pendingScorer=null; closePicker();
+    setTimeout(()=>{ openMultiPicker({title:'Pick the other THREE on-ice (Our Goal)', max:3, event:ev, field:'forOnIce', exclude}); }, 60);
+    return;
   }
-  if(pendingType==='for_goal'){ addEvent('for_goal',{player:num}); closePicker(); }
+  if(pendingType==='for_goal'){
+    const ev = addEvent('for_goal',{player:num});
+    closePicker();
+    setTimeout(()=>{ openMultiPicker({title:'Pick the other THREE on-ice (Our Goal)', max:3, event:ev, field:'forOnIce', exclude:[num]}); }, 60);
+  }
 }
 
 /* Wiring main buttons */
