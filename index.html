@@ -33,7 +33,7 @@
   .btn.team{background:#2a2342}
   .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
   .card{background:#101520;border:1px solid #233044;border-radius:12px;padding:10px}
-  .card h3{margin:0 0 2px;font-size:12px;color:var(--muted)} .card .val{font-size:18px;font-weight:700}
+  .card h3{margin:0 0 2px;font-size:12px;color:#9aa6b2} .card .val{font-size:18px;font-weight:700}
   .periods{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:4px}
   .chip{text-align:center;padding:10px 8px;border-radius:10px;border:1px solid #2a3444;background:#152030;font-weight:700;cursor:pointer;user-select:none}
   .chip.active{background:#1b3352;border-color:#2f5e9a;color:#cfe5ff}
@@ -515,9 +515,8 @@ function openGAContext(ev){
 $('gaGrid').addEventListener('click', e=>{
   const chip = e.target.closest('.pickerBtn'); if(!chip || !lastGAEvent) return;
   lastGAEvent.ga_ctx = chip.dataset.t;
-  save(); $('gaOverlay').style.display='none'; 
-  // after GA context, optionally collect our on-ice for minus tracking
-  setTimeout(()=> openGAOnIcePicker(lastGAEvent), 60);
+  save(); $('gaOverlay').style.display='none';
+  setTimeout(()=> openGAOnIcePicker(lastGAEvent), 60); // one-screen on-ice after GA context
   lastGAEvent=null;
 });
 $('gaSkip').addEventListener('click', ()=>{
@@ -537,19 +536,22 @@ function tagGACause(gaEv){
   save();
 }
 
-/* ===== On-ice multi-select for Our Goal (other three) ===== */
-let pendingOnIce = null; // {goalEventId, mode:'GF'|'GA', max, destField}
-function buildMSGrid(gridId, preselectedSet=new Set()){
+/* ===== On-ice multi-select helpers (exclusions added) ===== */
+function buildMSGrid(gridId, preselectedSet=new Set(), excludeSet=new Set()){
   const grid=$(gridId); const roster=(state.roster||[]);
   const uniq = Array.from(new Set(roster.map(x=>String(x).trim()).filter(Boolean)))
+                    .filter(n=>!excludeSet.has(n))
                     .sort((a,b)=>{const na=+a, nb=+b; const an=isNaN(na), bn=isNaN(nb); if(an&&bn) return (''+a).localeCompare(''+b); if(an) return 1; if(bn) return -1; return na-nb;});
   grid.innerHTML = uniq.map(n=>`<div class="msBtn ${preselectedSet.has(n)?'selected':''}" data-n="${n}">#${n}</div>`).join('');
 }
-function openOnIcePicker(goalEv, scorer, assist){
-  pendingOnIce = {goalEventId: goalEv.id, mode:'GF', max:3, destField:'on_ice'};
+
+/* ===== Our Goal: other three (exclude scorer+assist) ===== */
+let pendingOnIce = null; // {goalEventId, max, destField, exclude:Set}
+function openOnIcePicker(goalEv, excludeArr=[]){
+  pendingOnIce = {goalEventId: goalEv.id, max:3, destField:'on_ice', exclude:new Set(excludeArr.filter(Boolean))};
   $('onIceTitle').textContent = 'Select the other three skaters';
   $('onIceCount').textContent = '0/3';
-  buildMSGrid('onIceGrid');
+  buildMSGrid('onIceGrid', new Set(), pendingOnIce.exclude);
   $('onIceModal').style.display='flex';
 }
 function closeOnIcePicker(){ $('onIceModal').style.display='none'; pendingOnIce=null; }
@@ -566,14 +568,12 @@ $('onIceGrid').addEventListener('click', e=>{
 });
 $('onIceUnknown').addEventListener('click', ()=>{
   if(!pendingOnIce) return;
-  // Mark unknown by storing 'Unknown' entries to fill remaining
   const gridSelCount = $('onIceGrid').querySelectorAll('.msBtn.selected').length;
   const remain = Math.max(0, pendingOnIce.max - gridSelCount);
   const ev = state.events.find(e=>e.id===pendingOnIce.goalEventId);
   if(!ev) return;
   const extras = [...$('onIceGrid').querySelectorAll('.msBtn.selected')].map(b=>b.dataset.n);
   const pack = [];
-  // include scorer + assist if present
   if(ev.player) pack.push(ev.player);
   if(ev.assist && ev.assist!=='Unknown' && ev.assist!=='None') pack.push(ev.assist);
   pack.push(...extras);
@@ -593,13 +593,13 @@ $('onIceDone').addEventListener('click', ()=>{
 });
 $('onIceCancel').addEventListener('click', ()=>{ closeOnIcePicker(); });
 
-/* ===== Optional GA on-ice (for minuses) ===== */
+/* ===== Optional GA on-ice (all five on one screen) ===== */
 let pendingGAOnIce = null;
 function openGAOnIcePicker(gaEv){
   pendingGAOnIce = {gaEventId: gaEv.id, max:5};
   $('gaOnIceTitle').textContent = 'Our skaters on ice for GA (optional)';
   $('gaOnIceCount').textContent = '0/5';
-  buildMSGrid('gaOnIceGrid');
+  buildMSGrid('gaOnIceGrid'); // no exclusions here
   $('gaOnIceModal').style.display='flex';
 }
 function closeGAOnIcePicker(){ $('gaOnIceModal').style.display='none'; pendingGAOnIce=null; }
@@ -626,7 +626,7 @@ $('gaOnIceDone').addEventListener('click', ()=>{
 });
 $('gaOnIceSkip').addEventListener('click', ()=> closeGAOnIcePicker());
 
-/* Scoring */
+/* Scoring (unchanged core math) */
 function computeGoalieScore(){
   const C = state.countsA;
   const shots = C.shots, ga = C.goals, saves = Math.max(0, shots - ga);
@@ -686,7 +686,7 @@ function computeTeamScore(){
 }
 function shotShare(){ const sf = state.countsF.shots, sa = state.countsA.shots; const d = sf+sa; return d>0 ? (sf/d) : 0.5; }
 
-/* Per-player tallies (goal counts as a shot) & plus/minus */
+/* Per-player tallies & plus/minus (unchanged) */
 function perPlayerTallies(){
   const shots = new Map(), goals = new Map(), assists = new Map(), all=new Set();
   for(const ev of state.events){
@@ -710,7 +710,6 @@ function computePlusMinus(){
   for(const ev of state.events){
     if(ev.type==='for_goal'){
       const on = Array.isArray(ev.on_ice)? ev.on_ice.slice(): [];
-      // ensure scorer/assist included if not in on_ice yet
       if(ev.player && !on.includes(ev.player)) on.push(ev.player);
       if(ev.assist && ev.assist!=='Unknown' && ev.assist!=='None' && !on.includes(ev.assist)) on.push(ev.assist);
       on.forEach(plus);
@@ -723,7 +722,7 @@ function computePlusMinus(){
   return pm;
 }
 
-/* Render */
+/* Render (unchanged except .XXX display) */
 function updateMeta(){
   $('gameMetaTag').textContent =
     `${state.opponent||'Opponent?'} • ${state.level||'U11'} • ${state.date||new Date().toISOString().slice(0,10)}`;
@@ -890,7 +889,7 @@ function endGame(){
   window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
 }
 
-/* CSV, filenames, and copy (unchanged layout; rates kept as text) */
+/* CSV & copy (unchanged) */
 function safeName(s){ return String(s||'').replace(/[^\w\d\-_.() ]/g,'_').trim().replace(/\s+/g,''); }
 function buildGameRow(K, Team){
   const F=state.countsF, A=state.countsA;
@@ -970,28 +969,24 @@ $('btnCopySummary').addEventListener('click', ()=> openCopyModal(buildSummaryTex
 $('btnCopySelect').addEventListener('click', ()=>{ $('copyArea').focus(); $('copyArea').select(); });
 $('btnCopyClose').addEventListener('click', ()=>{ $('copyModal').style.display='none'; });
 
-/* Roster & Picker */
-function openRoster(){ $('rosterArea').value=(state.roster||[]).join('\n'); $('rosterModal').style.display='flex'; }
-function closeRoster(){ $('rosterModal').style.display='none'; }
-function saveRosterFromArea(){
-  const lines=$('rosterArea').value.split('\n').map(s=>s.trim()).filter(Boolean);
-  const uniq = Array.from(new Set(lines));
-  uniq.sort((a,b)=>{const na=+a, nb=+b; const an=isNaN(na), bn=isNaN(nb); if(an&&bn) return (''+a).localeCompare(''+b); if(an) return 1; if(bn) return -1; return na-nb;});
-  state.roster=uniq; localStorage.setItem(ROSTER_KEY, JSON.stringify(state.roster)); save(); closeRoster();
-}
+/* Roster & Picker (exclusion support added) */
 let pendingType=null, pendingScorer=null;
-function openPicker(type, title='Select player number'){
+let pickerExclude = new Set();
+
+function openPicker(type, title='Select player number', excludeArr=[]){
   pendingType=type;
+  pickerExclude = new Set(excludeArr.filter(Boolean));
   buildPickerGrid();
   $('pickerTitle').textContent = title;
   $('pickerInput').value='';
   $('pickerModal').style.display='flex';
 }
-function closePicker(){ $('pickerModal').style.display='none'; pendingType=null; }
+function closePicker(){ $('pickerModal').style.display='none'; pendingType=null; pickerExclude=new Set(); }
 function buildPickerGrid(){
   const grid = $('pickerGrid'), roster = (state.roster||[]);
-  const uniq = Array.from(new Set(roster.map(x=>String(x).trim()).filter(Boolean)));
-  uniq.sort((a,b)=>{const na=+a, nb=+b; const an=isNaN(na), bn=isNaN(nb); if(an&&bn) return (''+a).localeCompare(''+b); if(an) return 1; if(bn) return -1; return na-nb;});
+  const uniq = Array.from(new Set(roster.map(x=>String(x).trim()).filter(Boolean)))
+    .filter(n=>!pickerExclude.has(n))
+    .sort((a,b)=>{const na=+a, nb=+b; const an=isNaN(na), bn=isNaN(nb); if(an&&bn) return (''+a).localeCompare(''+b); if(an) return 1; if(bn) return -1; return na-nb;});
   grid.innerHTML = uniq.length? uniq.map(n=>`<div class="pickerBtn" data-n="${n}">#${n}</div>`).join('')
                               : `<div class="small">No roster yet. Add numbers in the Roster menu.</div>`;
 }
@@ -1002,6 +997,7 @@ $('pickerGrid').addEventListener('click', e=>{
 $('pickerAdd').addEventListener('click', ()=>{
   if(!pendingType) return;
   const v=$('pickerInput').value.trim(); if(!v) return;
+  if(pickerExclude.has(v)) return; // don't allow excluded number via typing
   handlePickerSelection(v,true);
 });
 $('pickerUnknown').addEventListener('click', ()=>{ if(!pendingType) return; handlePickerSelection('Unknown',true); });
@@ -1010,14 +1006,14 @@ $('pickerCancel').addEventListener('click', ()=>{ closePicker(); pendingScorer=n
 function handlePickerSelection(num, allowAdd){
   if(pendingType==='for_shot'){
     addEvent('for_shot',{player:num});
-    if(allowAdd && !state.roster.includes(num)){ state.roster.push(num); state.roster.sort((a,b)=>+a-+b); localStorage.setItem(ROSTER_KEY, JSON.stringify(state.roster)); }
+    if(allowAdd && !state.roster.includes(num) && num!=='Unknown'){ state.roster.push(num); state.roster.sort((a,b)=>+a-+b); localStorage.setItem(ROSTER_KEY, JSON.stringify(state.roster)); }
     closePicker(); return;
   }
   if(pendingType==='for_goal_scorer'){
     pendingScorer = num;
-    if(allowAdd && !state.roster.includes(num)){ state.roster.push(num); state.roster.sort((a,b)=>+a-+b); localStorage.setItem(ROSTER_KEY, JSON.stringify(state.roster)); }
+    if(allowAdd && !state.roster.includes(num) && num!=='Unknown'){ state.roster.push(num); state.roster.sort((a,b)=>+a-+b); localStorage.setItem(ROSTER_KEY, JSON.stringify(state.roster)); }
     $('pickerModal').style.display='none';
-    setTimeout(()=>{ openPicker('for_goal_assist','Select assist (optional)'); }, 80);
+    setTimeout(()=>{ openPicker('for_goal_assist','Select assist (optional)', [pendingScorer]); }, 80);
     return;
   }
   if(pendingType==='for_goal_assist'){
@@ -1026,17 +1022,24 @@ function handlePickerSelection(num, allowAdd){
     addEvent('for_goal', ev);
     const created = state.events[state.events.length-1];
     pendingScorer=null; closePicker();
-    // after assist, open the "other three" on-ice picker
-    setTimeout(()=> openOnIcePicker(created, created.player, created.assist), 80);
+    // exclude scorer + assist for the other-three picker
+    const excl = [created.player];
+    if(created.assist && created.assist!=='Unknown' && created.assist!=='None') excl.push(created.assist);
+    setTimeout(()=> openOnIcePicker(created, excl), 80);
     return;
   }
   if(pendingType==='for_goal'){ addEvent('for_goal',{player:num}); closePicker(); }
 }
 
 /* Wiring main buttons */
-$('btnRoster').addEventListener('click', openRoster);
-$('btnRosterSave').addEventListener('click', saveRosterFromArea);
-$('btnRosterClose').addEventListener('click', closeRoster);
+$('btnRoster').addEventListener('click', ()=>{ $('rosterArea').value=(state.roster||[]).join('\n'); $('rosterModal').style.display='flex'; });
+$('btnRosterSave').addEventListener('click', ()=>{
+  const lines=$('rosterArea').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const uniq = Array.from(new Set(lines));
+  uniq.sort((a,b)=>{const na=+a, nb=+b; const an=isNaN(na), bn=isNaN(nb); if(an&&bn) return (''+a).localeCompare(''+b); if(an) return 1; if(bn) return -1; return na-nb;});
+  state.roster=uniq; localStorage.setItem(ROSTER_KEY, JSON.stringify(state.roster)); save(); $('rosterModal').style.display='none';
+});
+$('btnRosterClose').addEventListener('click', ()=>{ $('rosterModal').style.display='none'; });
 
 $('btnShot').addEventListener('click', ()=>addEvent('shot'));
 $('btnBigSave').addEventListener('click', ()=>addEvent('big_save'));
@@ -1079,7 +1082,7 @@ $('btnResetSeason').addEventListener('click', async ()=>{
   await saveSeason([]); alert('Season log cleared.');
 });
 
-/* Exports with smart filenames */
+/* Exports */
 $('btnExportGameCSV').addEventListener('click', ()=>{
   const csv = gameCSV();
   const date = state.date || new Date().toISOString().slice(0,10);
