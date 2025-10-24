@@ -130,14 +130,14 @@
       <div class="card"><h3>Shots Against</h3><div class="val" id="shotsVal">0</div></div>
       <div class="card"><h3>Saves</h3><div class="val" id="savesVal">0</div></div>
       <div class="card"><h3>Goals Against</h3><div class="val" id="gaVal">0</div></div>
-      <div class="card"><h3>Save %</h3><div class="val" id="svVal">—</div></div>
+      <div class="card"><h3>Save %</h3><div class="val" id="svVal">.000</div></div>
       <div class="card"><h3>Smothers</h3><div class="val" id="smotherVal">0</div></div>
       <div class="card"><h3>Bad Rebounds</h3><div class="val" id="brVal">0</div></div>
       <div class="card"><h3>Big Saves</h3><div class="val" id="bigVal">0</div></div>
       <div class="card"><h3>Shots For</h3><div class="val" id="sfVal">0</div></div>
       <div class="card"><h3>Goals For</h3><div class="val" id="gfVal">0</div></div>
-      <div class="card"><h3>Our Shooting %</h3><div class="val" id="shootVal">—</div></div>
-      <div class="card"><h3>Shot Share</h3><div class="val" id="ssVal">—</div></div>
+      <div class="card"><h3>Our Shooting %</h3><div class="val" id="shootVal">.000</div></div>
+      <div class="card"><h3>Shot Share</h3><div class="val" id="ssVal">.500</div></div>
       <div class="card"><h3>Breakaways Ag.</h3><div class="val" id="baVal">0</div></div>
       <div class="card"><h3>D-Zone TO</h3><div class="val" id="dzVal">0</div></div>
       <div class="card"><h3>Team Score</h3><div class="val" id="teamScoreVal">—</div></div>
@@ -334,6 +334,7 @@ function fmtTime(iso){ const d=new Date(iso);
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
 }
 function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+function dot3(num, den, fallback='.000'){ return den>0 ? (num/den).toFixed(3).slice(1) : fallback; }
 
 /* ===== Event accounting ===== */
 function bump(type, period){
@@ -373,7 +374,7 @@ function revert(ev){
   save();
 }
 
-/* Undo interactions (long-press shows last 5) */
+/* Undo interactions (long-press modal) */
 let undoHoldTimer=null, undoHeld=false;
 function startUndoHold(){ undoHeld=false; undoHoldTimer=setTimeout(()=>{ undoHeld=true; showUndoModal(); }, 600); }
 function endUndoHold(){ if(undoHoldTimer){ clearTimeout(undoHoldTimer); undoHoldTimer=null; } if(!undoHeld){ undo(); } }
@@ -395,7 +396,7 @@ function showToast(msg, evToRestore){
 }
 function showUndoModal(){
   const list = $('undoList');
-  const last = state.events.slice(-5).reverse(); // last 5
+  const last = state.events.slice(-5).reverse();
   if(!last.length){ return; }
   list.innerHTML = last.map(ev=>`<div class="undoRow" data-id="${ev.id}">
       <div><b>P${ev.period}</b> • ${fmtTime(ev.tISO)}</div>
@@ -475,7 +476,7 @@ function tagGACause(gaEv){
   save();
 }
 
-/* Scoring */
+/* Scoring (unchanged math; display uses raw) */
 function computeGoalieScore(){
   const C = state.countsA;
   const shots = C.shots, ga = C.goals, saves = Math.max(0, shots - ga);
@@ -562,23 +563,29 @@ function refreshStats(){
   $('shotsVal').textContent = A.shots;
   $('savesVal').textContent = K.saves;
   $('gaVal').textContent    = A.goals;
-  $('svVal').textContent    = (K.sv*100).toFixed(1)+'%';
+
+  // Display RAW save % as .XXX
+  const svDot = dot3(Math.max(0, A.shots - A.goals), A.shots, '.000');
+  $('svVal').textContent = svDot;
+
   $('smotherVal').textContent = A.smothers;
   $('brVal').textContent      = A.badRebounds;
   $('bigVal').textContent     = A.bigSaves;
   $('sfVal').textContent      = F.shots;
   $('gfVal').textContent      = F.goals;
-  $('shootVal').textContent   = F.shots>0 ? ((F.goals/F.shots*100).toFixed(1)+'%') : '—';
-  $('ssVal').textContent      = ((shotShare()*100).toFixed(0)) + '%';
+
+  // Our Shooting % and Shot Share as .XXX
+  $('shootVal').textContent   = dot3(F.goals, F.shots, '.000');
+  $('ssVal').textContent      = shotShare().toFixed(3).slice(1);
+
   $('baVal').textContent      = T.breakawaysAgainst||0;
   $('dzVal').textContent      = T.dzTurnovers||0;
   $('teamScoreVal').textContent = Team.total;
 
   const phtml = [1,2,3,4].map(p=>{
     const v = per[p];
-    const saves = Math.max(0, v.A_shots - v.A_goals);
-    const svp = v.A_shots ? ((saves/v.A_shots)*100).toFixed(0)+'%' : '—';
-    const ourShp = v.F_shots? ((v.F_goals/v.F_shots)*100).toFixed(0)+'%':'—';
+    const svp = v.A_shots ? ((Math.max(0, v.A_shots - v.A_goals)/v.A_shots).toFixed(3).slice(1)) : '—';
+    const ourShp = v.F_shots? ((v.F_goals/v.F_shots).toFixed(3).slice(1)):'—';
     const title = p===4?'OT':`P${p}`;
     return `<div class="pchip"><h4>${title}</h4>
               <div>SF-SA ${v.F_shots}-${v.A_shots} • GF-GA ${v.F_goals}-${v.A_goals} • SV ${svp} • Sh% ${ourShp}</div>
@@ -606,23 +613,21 @@ function makeSummaryTable(){
   </tr></thead><tbody>`;
   for(const p of [1,2,3,4]){
     const v = per[p];
-    const saves = Math.max(0, v.A_shots - v.A_goals);
-    const svp = v.A_shots? ((saves/v.A_shots)*100).toFixed(0)+'%':'—';
-    const ourShp = v.F_shots? ((v.F_goals/v.F_shots)*100).toFixed(0)+'%':'—';
+    const svp = v.A_shots? ((Math.max(0, v.A_shots - v.A_goals)/v.A_shots).toFixed(3).slice(1)):'—';
+    const ourShp = v.F_shots? ((v.F_goals/v.F_shots).toFixed(3).slice(1)):'—';
     const title = p===4?'OT':p;
     rows.push(`<tr><td>${title}</td><td>${v.F_shots}</td><td>${v.A_shots}</td><td>${v.F_goals}</td><td>${v.A_goals}</td><td>${svp}</td><td>${ourShp}</td></tr>`);
   }
   const F = state.countsF, A = state.countsA;
-  const totalSaves = Math.max(0, A.shots - A.goals);
-  const totalSVP = A.shots? ((totalSaves/A.shots)*100).toFixed(0)+'%':'—';
-  const ourShpT = F.shots? ((F.goals/F.shots)*100).toFixed(0)+'%':'—';
+  const totalSVP = dot3(Math.max(0, A.shots - A.goals), A.shots, '.000');
+  const ourShpT = dot3(F.goals, F.shots, '.000');
   rows.push(`<tr><th>Total</th><th>${F.shots}</th><th>${A.shots}</th><th>${F.goals}</th><th>${A.goals}</th><th>${totalSVP}</th><th>${ourShpT}</th></tr>`);
   const tbl = header + rows.join('') + `</tbody></table>`;
 
   const T = perPlayerTallies();
   const playerRows = T.order.map(n=>{
     const s=T.shots.get(n)||0, g=T.goals.get(n)||0, a=T.assists.get(n)||0;
-    const shp = s? ((g/s)*100).toFixed(0)+'%':'—';
+    const shp = s? (g/s).toFixed(3).slice(1):'.000';
     return `<tr><td>#${n}</td><td>${s}</td><td>${g}</td><td>${a}</td><td>${shp}</td></tr>`;
   }).join('');
   const playersTbl = `
@@ -637,9 +642,9 @@ function makeSummaryTable(){
 }
 function renderAll(){ highlightPeriod(); updateMeta(); refreshStats(); refreshLog(); }
 
-/* Readable narrative summary */
+/* Readable narrative summary (percentages as .XXX) */
 function buildReadableSummary(){
-  const K = computeGoalieScore(), T = computeTeamScore();
+  const K = computeGoalieScore();
   const F=state.countsF, A=state.countsA;
   const date = state.date || new Date().toISOString().slice(0,10);
   const opponent = state.opponent || 'Unknown opponent';
@@ -647,8 +652,8 @@ function buildReadableSummary(){
   const gaBA = state.events.filter(e=> (e.type==='goal'||e.type==='soft_goal') && e.ga_cause==='BA').length;
   const gaDZ = state.events.filter(e=> (e.type==='goal'||e.type==='soft_goal') && e.ga_cause==='DZ').length;
   const gaOther = state.events.filter(e=> (e.type==='goal'||e.type==='soft_goal') && (!e.ga_cause || e.ga_cause==='other')).length;
-  const ourShPct = F.shots? ((F.goals/F.shots)*100).toFixed(1)+'%' : '0.0%';
-  const svPct = (K.sv*100).toFixed(1)+'%';
+  const ourShPct = dot3(F.goals, F.shots, '.000');
+  const svPct = dot3(Math.max(0, A.shots - A.goals), A.shots, '.000');
 
   return `
   <div class="card">
@@ -659,7 +664,7 @@ function buildReadableSummary(){
 
   <div class="card" style="margin-top:8px;">
     <h3>Scores</h3>
-    <div><b>Team Score:</b> ${T.total} / 100</div>
+    <div><b>Team Score:</b> ${computeTeamScore().total} / 100</div>
     <div><b>Goalie Score:</b> ${K.total} / 100</div>
   </div>
 
@@ -710,8 +715,8 @@ function buildGameRow(K, Team){
     teamScore: Team.total,
     goalieScore: K.total,
     SF: F.shots, SA: A.shots, GF: F.goals, GA: A.goals,
-    ourShootingPct: F.shots? ((F.goals/F.shots)*100).toFixed(1) : '0.0',
-    savePct: (K.sv*100).toFixed(1),
+    ourShootingPct: dot3(F.goals, F.shots, '.000'),
+    savePct: dot3(Math.max(0, A.shots - A.goals), A.shots, '.000'),
     smothers: A.smothers, badRebounds: A.badRebounds, bigSaves: A.bigSaves, softGoals: A.softGoals,
     breakawaysAgainst: state.team.breakawaysAgainst||0, dzTurnovers: state.team.dzTurnovers||0,
     GA_off_BA: gaBA, GA_off_DZ: gaDZ, GA_other: gaOther
@@ -739,7 +744,8 @@ function gameCSV(){
   const T = perPlayerTallies();
   const header = 'player,shots,goals,assists,sh%';
   const rows = T.order.map(n=>{
-    const s=T.shots.get(n)||0,g=T.goals.get(n)||0,a=T.assists.get(n)||0, shp = s? ((g/s)*100).toFixed(0)+'%':'—';
+    const s=T.shots.get(n)||0,g=T.goals.get(n)||0,a=T.assists.get(n)||0;
+    const shp = s? (g/s).toFixed(3).slice(1):'.000';
     return `${JSON.stringify('#'+n)},${s},${g},${a},${shp}`;
   }).join('\r\n');
   return line1 + '\r\n' + header + '\r\n' + rows + '\r\n';
