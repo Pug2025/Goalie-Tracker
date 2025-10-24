@@ -6,7 +6,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<title>Team Tracker – iPhone (v3.3.5)</title>
+<title>Team Tracker – iPhone (v3.3.6)</title>
 <style>
   :root{
     --bg:#0b0e11; --panel:#141922; --ink:#e8ecf1; --muted:#9aa6b2; --accent:#4da3ff;
@@ -78,7 +78,7 @@
     <h1>Team Tracker</h1>
     <div class="inlineRow">
       <button class="btn roster" id="btnRoster" type="button" aria-haspopup="dialog" aria-controls="rosterModal">Roster</button>
-      <div class="tag" id="gameMetaTag">New game • v3.3.5</div>
+      <div class="tag" id="gameMetaTag">New game • v3.3.6</div>
     </div>
   </header>
 
@@ -174,12 +174,18 @@
         <h3>Goalie Breakdown</h3>
         <div class="small" id="scoreBreakdown"></div>
       </div>
+      <div class="card" style="min-width:220px;">
+        <h3>Team Breakdown</h3>
+        <div class="small" id="teamBreakdown"></div>
+      </div>
     </div>
 
     <!-- Readable narrative -->
     <div id="summaryReadable" style="margin-top:10px; line-height:1.5"></div>
 
     <div id="summaryTableWrap" style="margin-top:10px;"></div>
+
+    <div id="pmTableWrap" style="margin-top:10px;"></div>
   </section>
 </div>
 
@@ -270,7 +276,7 @@
 
 <script>
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', ()=>navigator.serviceWorker.register('service-worker.js?v=3.3.5'));
+  window.addEventListener('load', ()=>navigator.serviceWorker.register('service-worker.js?v=3.3.6'));
 }
 
 /* ===== IndexedDB KV helper ===== */
@@ -650,16 +656,50 @@ function perPlayerTallies(){
   for(const ev of state.events){
     if((ev.type==='for_shot' || ev.type==='for_goal') && ev.player){ shots.set(ev.player,(shots.get(ev.player)||0)+1); all.add(ev.player); }
     if(ev.type==='for_goal' && ev.player){ goals.set(ev.player,(goals.get(ev.player)||0)+1); all.add(ev.player); }
-    if(ev.type==='for_goal' && ev.assist && ev.assist!=='None'){ assists.set(ev.assist,(assists.get(ev.assist)||0)+1); all.add(ev.assist); }
+    if(ev.type==='for_goal' && ev.assist && ev.assist!=='None' && ev.assist!=='Unknown'){ assists.set(ev.assist,(assists.get(ev.assist)||0)+1); all.add(ev.assist); }
   }
   const order=[...all].sort((a,b)=>{const na=+a, nb=+b; const an=isNaN(na), bn=isNaN(nb); if(an&&bn) return (''+a).localeCompare(''+b); if(an) return 1; if(bn) return -1; return na-nb;});
   return {shots, goals, assists, order};
 }
 
+/* ===== Plus/Minus ===== */
+function computePlusMinus(){
+  const pm = new Map(); // number -> +/- integer
+
+  function inc(n, delta){
+    if(n==='Unknown' || n==='?' || !n) return;
+    pm.set(n, (pm.get(n)||0) + delta);
+  }
+
+  for(const ev of state.events){
+    // Our goals: +1 for each known on-ice
+    if(ev.type==='for_goal'){
+      const set = new Set();
+      if(ev.player && ev.player!=='?' && ev.player!=='Unknown') set.add(ev.player);
+      if(ev.assist && ev.assist!=='None' && ev.assist!=='Unknown' && ev.assist!=='?') set.add(ev.assist);
+      if(Array.isArray(ev.forOnIce)){
+        for(const p of ev.forOnIce){ if(p!=='Unknown') set.add(p); }
+      }
+      // Now credit everyone in the set
+      for(const n of set) inc(n, +1);
+    }
+    // Goals against: -1 for each known on-ice
+    if(ev.type==='goal' || ev.type==='soft_goal'){
+      if(Array.isArray(ev.onIce)){
+        for(const n of ev.onIce){ if(n!=='Unknown') inc(n, -1); }
+      }
+    }
+  }
+
+  // Sort order numeric-aware
+  const order = [...pm.keys()].sort((a,b)=>{const na=+a, nb=+b; const an=isNaN(na), bn=isNaN(nb); if(an&&bn) return (''+a).localeCompare(''+b); if(an) return 1; if(bn) return -1; return na-nb;});
+  return {pm, order};
+}
+
 /* Render */
 function updateMeta(){
   $('gameMetaTag').textContent =
-    `${state.opponent||'Opponent?'} • ${state.level||'U11'} • ${state.date||new Date().toISOString().slice(0,10)} • v3.3.5`;
+    `${state.opponent||'Opponent?'} • ${state.level||'U11'} • ${state.date||new Date().toISOString().slice(0,10)} • v3.3.6`;
 }
 function refreshStats(){
   const A = state.countsA, F = state.countsF, T = state.team;
@@ -742,9 +782,25 @@ function makeSummaryTable(){
     </div>`;
   return tbl + playersTbl;
 }
+function makePlusMinusTable(){
+  const {pm, order} = computePlusMinus();
+  const rows = order.map(n=>{
+    const v = pm.get(n)||0;
+    const sign = v>0? '+' : (v<0? '':'0'===String(v)? '' : '');
+    return `<tr><td>#${n}</td><td>${sign}${v}</td></tr>`;
+  }).join('');
+  return `
+    <div class="card">
+      <h3>Plus/Minus Summary</h3>
+      <table style="margin-top:6px;">
+        <thead><tr><th>Player</th><th>+/-</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="2">—</td></tr>'}</tbody>
+      </table>
+    </div>`;
+}
 function renderAll(){ highlightPeriod(); updateMeta(); refreshStats(); refreshLog(); }
 
-/* Readable narrative summary (unchanged but shows .XXX) */
+/* Readable narrative summary */
 function buildReadableSummary(){
   const K = computeGoalieScore(), T = computeTeamScore();
   const F=state.countsF, A=state.countsA;
@@ -779,6 +835,20 @@ function buildReadableSummary(){
   `;
 }
 
+/* Team breakdown text */
+function buildTeamBreakdown(){
+  const T = computeTeamScore();
+  const parts = [
+    `Shot share contributed <b>${T.scoreSS.toFixed(1)}</b> pts`,
+    `Finishing <b>${T.scoreFin.toFixed(1)}</b>`,
+    `Impact (goal diff / volume) <b>${T.scoreImp.toFixed(1)}</b>`,
+    `Stability across periods <b>${T.scoreStab.toFixed(1)}</b>`,
+    `Breakaways against penalty <b>${Math.min(12, 3*(state.team.breakawaysAgainst||0)).toFixed(1)}</b>`,
+    `D-zone turnover penalty <b>${Math.min(12, 1.5*(state.team.dzTurnovers||0)).toFixed(1)}</b>`
+  ];
+  return parts.join('. ') + '.';
+}
+
 /* Summary flow */
 function endGame(){
   const K = computeGoalieScore();
@@ -795,15 +865,18 @@ function endGame(){
   $('scoreBreakdown').innerHTML =
     `Save % contributed <b>${K.scoreSV.toFixed(1)}</b> pts. Rebound control <b>${K.scoreRebound.toFixed(1)}</b> (good ${K.goodRebounds}, bad ${state.countsA.badRebounds}). Soft goals impact <b>${K.scoreSoft.toFixed(1)}</b>. Big saves <b>${K.scoreBig.toFixed(1)}</b>.`;
 
+  $('teamBreakdown').innerHTML = buildTeamBreakdown();
+
   $('summaryReadable').innerHTML = buildReadableSummary();
   $('summaryTableWrap').innerHTML = makeSummaryTable();
+  $('pmTableWrap').innerHTML = makePlusMinusTable();
 
   $('summaryPanel').classList.remove('hidden');
   appendToSeasonLog(K, Team);
   window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
 }
 
-/* CSV, filenames, and copy (unchanged aside from .XXX already in rows) */
+/* CSV, filenames, and copy */
 function safeName(s){ return String(s||'').replace(/[^\w\d\-_.() ]/g,'_').trim().replace(/\s+/g,''); }
 function buildGameRow(K, Team){
   const F=state.countsF, A=state.countsA;
@@ -975,8 +1048,8 @@ $('btnReset').addEventListener('click', ()=>{
   $('summaryPanel').classList.add('hidden');
   $('summaryTitle').textContent='Game Summary';
   $('goalieScoreNum').textContent='—'; $('teamScoreNum').textContent='—';
-  $('scoreBreakdown').textContent=''; $('summaryTableWrap').innerHTML='';
-  $('summaryReadable').innerHTML='';
+  $('scoreBreakdown').textContent=''; $('teamBreakdown').textContent=''; $('summaryTableWrap').innerHTML='';
+  $('pmTableWrap').innerHTML=''; $('summaryReadable').innerHTML='';
 
   state.opponent=''; state.level='U11'; state.date=null; state.period=1;
   state.startedAt=new Date().toISOString(); state.gameId=Math.random().toString(36).slice(2);
